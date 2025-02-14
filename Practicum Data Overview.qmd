@@ -1,0 +1,301 @@
+---
+title: "Practicum Data Overview"
+format: html
+editor: visual
+---
+
+# Practicum Data Overview:
+
+## Packages
+
+```{r}
+library(gitcreds)
+library(readxl)
+library(tidyverse)
+library(dplyr)
+library(psych)
+library(ggplot2)
+library(plotly) # Used for interactive charts from ggplot
+```
+
+## Data Import
+
+Getting started, we'll begin by importing the dataset.
+
+The data is stored in .xlsx format with two sheets. The first being in wide format (primary) and the second being in long format (medical history).
+
+We'll use the readxl package to import both sheets separately:
+
+```{r}
+
+# Define the file path
+file_path <- "C:\\Users\\domin\\Downloads\\nesDataPull_2-14-2025.xlsx"
+
+# Read the first sheet
+patient_info <- read_excel(file_path, sheet = 1)  # By index
+
+# Read the second sheet
+MedHx <- read_excel(file_path, sheet = 2)  # By index
+
+
+```
+
+Let's do a quick overview to check our import was successful
+
+```{r}
+head(patient_info)
+
+head(MedHx)
+```
+
+## Comorbidities Formatting:
+
+Everything looks good. However, I want one contiguous database with all of the data.
+
+MedHx is in the long format. In this case, it's in the long format. I'll need to switch it to the wide format based on the variable: tblPatient::EXT_ID
+
+```{r}
+
+# We'll start by flipping the data to have each patient ID number as the observation. To do this, let's change the ID variable name into something easier.
+
+MedHx$patient_id <- MedHx$`tblPatient::EXT_ID`
+
+# Now get rid of the old name:
+
+MedHx <- MedHx %>% select(-`tblPatient::EXT_ID`)
+
+
+MedHx_Wide <- pivot_wider(MedHx, id_cols = patient_id, names_from = condition, values_from = -c(patient_id,condition, diagnosisClass))
+
+head(MedHx_Wide)
+
+```
+
+### Removing unnecessary variables:
+
+Great, but we still have over 1,100 comorbidities. This isn't helpful, let's focus on some of the main ones and make a reduced dataframe.
+
+```{r}
+
+# Let's start with Psych
+
+MedHx_Psych_Full <- MedHx_Wide %>%
+  select(patient_id, matches("depress|anxiety|PTSD|Borderline|Bipolar|Trauma|Personality", ignore.case = TRUE))
+
+head(MedHx_Psych_Full)
+```
+
+### Dummy Coding Comorbidities.
+
+Great, the data is flipped to wide, now we want it to be made to be 1s and 0s for dummy coding. Currently, the data is either coded as a string (1), or NULL. All variables are currently a list (except for ID), I want to convert them to double while maintaining their binary status.
+
+```{r}
+
+# We will mutate across all variables and make them 1 or zero. If the list contained a 1, then it will stay a 1, if the values were anything else, it will be 0. 
+
+MedHx_Psych_Full <- MedHx_Psych_Full %>%
+    mutate(across(where(is.list), ~ as.numeric(ifelse(lengths(.) > 0 & !sapply(., is.null), 1, 0))))
+
+head(MedHx_Psych_Full)
+```
+
+### Data Concatenation:
+
+Ok. our data is now converted from lists to double. Now we'll need to concatenate the data.
+
+Currently, we have many different variables that are measuring similar constructs. Let's break this down for Psych Disorders:
+
+-   Depression:
+
+    -   Major depressive disorder
+
+    -   Depression
+
+    -   Major depressive disorder (MDD)
+
+    -   depression
+
+    -   Unspecified depressive disorder
+
+    -   major depressive disorder (MDD)
+
+    -   situational depression
+
+    -   Major Depressive disorder (MDD)
+
+    -   Recurrent Major Depressive Disorder (HC CODE)
+
+    -   Post Partum Depression
+
+-   Anxiety
+
+    -   Anxiety
+
+    -   Generalized anxiety disorder (GAD)
+
+    -   anxiety
+
+    -   Generalized anxiety disorder
+
+    -   Anxiety symptoms
+
+    -   Anxiety disorder
+
+    -   Occasional Anxiety
+
+    -   Social anxiety disorder
+
+    -   illness anxiety disorder
+
+    -   seizure anxiety
+
+    -   anxiety disorder
+
+    -   generalized anxiety disorder (GAD)
+
+    -   Anxiety Disorder
+
+    -   Illness anxiety Disorder
+
+-   PTSD
+
+    -   PTSD
+
+    -   Post traumatic stress disorder (PTSD)
+
+    -   Trauma and stress related disorder
+
+    -   Post Traumatic stress disorder (PTSD)
+
+    -   complex PTSD
+
+    -   post traumatic stress disorder (PTSD)
+
+    -   trauma and stress related disorder
+
+    -   C-PTSD
+
+    -   Trauma
+
+-   Bipolar
+
+    -   bipolar 1 disorder
+
+    -   Bipolar Disorder
+
+    -   Bipolar Disorder 1
+
+    -   Bipolar (type II)
+
+    -   Bipolar 1 disorder
+
+    -   Bipolar disorder
+
+    -   Bipolar II disorder
+
+    -   Bipolar Disorder II
+
+    -   Bipolar I Disorder
+
+    -   bipolar 2 disorder
+
+    -   bipolar type I
+
+-   Borderline PD
+
+    -   borderline personality disorder
+
+    -   Borderline Personality Disorder
+
+    -   borderline and prominent dissociation
+
+    -   Borderline personality disorder
+
+    -   Borderline personality Disorder
+
+We will need to combine these variables into groups for further analysis:
+
+```{r}
+
+# Let's create a global dummy variable for depression:
+MedHx_Psych_Full <- MedHx_Psych_Full %>%
+  rowwise() %>%
+   mutate(depression_any = as.numeric(any(c_across(c(`Major depressive disorder`, Depression, `Major depressive disorder (MDD)`, depression, `Unspecified depressive disorder`, `major depressive disorder (MDD)`, `situational depression`, `Major Depressive disorder (MDD)`, `Recurrent Major Depressive Disorder (HC CODE)`, `Post Partum Depression`)) == 1))) %>%
+  ungroup()
+
+# Same thing for Anxiety:
+MedHx_Psych_Full <- MedHx_Psych_Full %>%
+  rowwise() %>%
+   mutate(anxiety_any = as.numeric(any(c_across(c()) == 1))) %>%
+  ungroup()
+
+# Same thing for Bipolar
+```
+
+# Data Overview:
+
+## General Overview:
+
+I want to get a basic sense of what this dataframe looks like from a demographics standpoint:
+
+```{r}
+
+# Let's look at the overall distribution:
+describe(patient_info)
+
+prop.table(table(patient_info$`tblPatient::Gender`))
+prop.table(table(patient_info$`tblPatient::Race`))
+prop.table(table(patient_info$c_insuranceAtBaseline))
+
+
+# It's difficult to see trends in insurance, let's plot it visually.
+
+plot1 <- ggplot(patient_info, aes(x = c_insuranceAtBaseline)) +
+            geom_bar() +
+            theme_minimal() +
+            labs(title = "Insurance Distributions", x = "Insurance Plans", y = "Count")
+            theme(axis.text.x = element_text(angle = 90, hjust = 1))  
+ggplotly(plot1)   # Convert to interactive plotly chart
+
+
+# Let's do the same thing for race:
+plot2 <- ggplot(patient_info, aes(x = `tblPatient::Race`)) +
+            geom_bar() +
+            theme_minimal() +
+            labs(title = "Race Distribution", x = "Race", y = "Count")
+            theme(axis.text.x = element_text(angle = 90, hjust = 1))  
+ggplotly(plot2)
+
+```
+
+We are looking at:
+
+-   A total of 1008 patients
+
+-   A mean age of 39.5
+
+-   74.4% female, 21.7% male, and .04% other
+
+-   75.8% White
+
+-   A large group coming from Colorado Health First, United, Cigna, Anthem, and United.
+
+```         
+-   The largest Cohort is Colorado Health First. This is effectively medicaid, and could be a good marker for SES.
+```
+
+## Preliminary Results:
+
+Data entry has been spotty throughout both sheets. The primary issue is data entry points that are similar, but not fully the same. As a result, we're seeing a misleading spread of many different data points that are actually quite similar but are not captured as one value.
+
+Before any actual analysis can be done, we'll need to do some intensive data cleaning to make any conclusions about this data.
+
+# In My Data Cleaning Era
+
+## Insurance
+
+Let's start with the most egregious offender: Insurance:
+
+```{r}
+#Testing for GitHub
+```
