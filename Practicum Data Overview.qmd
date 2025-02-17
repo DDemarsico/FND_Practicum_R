@@ -12,7 +12,6 @@ editor: visual
 library(gitcreds)
 library(readxl)
 library(tidyverse)
-library(dplyr)
 library(psych)
 library(ggplot2)
 library(plotly) # Used for interactive charts from ggplot
@@ -71,37 +70,9 @@ head(MedHx_Wide)
 
 ```
 
-### Removing unnecessary variables:
-
-Great, but we still have over 1,100 comorbidities. This isn't helpful, let's focus on some of the main ones and make a reduced dataframe.
-
-```{r}
-
-# Let's start with Psych
-
-MedHx_Psych_Full <- MedHx_Wide %>%
-  select(patient_id, matches("depress|anxiety|PTSD|Borderline|Bipolar|Trauma|Personality", ignore.case = TRUE))
-
-head(MedHx_Psych_Full)
-```
-
-### Dummy Coding Comorbidities.
-
-Great, the data is flipped to wide, now we want it to be made to be 1s and 0s for dummy coding. Currently, the data is either coded as a string (1), or NULL. All variables are currently a list (except for ID), I want to convert them to double while maintaining their binary status.
-
-```{r}
-
-# We will mutate across all variables and make them 1 or zero. If the list contained a 1, then it will stay a 1, if the values were anything else, it will be 0. 
-
-MedHx_Psych_Full <- MedHx_Psych_Full %>%
-    mutate(across(where(is.list), ~ as.numeric(ifelse(lengths(.) > 0 & !sapply(., is.null), 1, 0))))
-
-head(MedHx_Psych_Full)
-```
-
 ### Data Concatenation:
 
-Ok. our data is now converted from lists to double. Now we'll need to concatenate the data.
+Great, but we still have over 1,100 comorbidities. This isn't helpful, let's focus on some of the main ones and make a reduced dataframe:
 
 Currently, we have many different variables that are measuring similar constructs. Let's break this down for Psych Disorders:
 
@@ -217,7 +188,38 @@ We will need to combine these variables into groups for further analysis:
 
 ```{r}
 
-# Let's create a global dummy variable for depression:
+# Let's start with Psych
+
+# This chunk creates the MedHx_Psych_Full dataframe by using information from the MedHx_Wide dataframe. I want our new dataframe to only contain variables that have the words in quotes in their variable names. 
+
+MedHx_Psych_Full <- MedHx_Wide %>%         
+  select(patient_id, matches("depress|anxiety|PTSD|Borderline|Bipolar|Trauma|Personality", ignore.case = TRUE)) 
+
+head(MedHx_Psych_Full)
+```
+
+### Dummy Coding Comorbidities.
+
+Great, the data is flipped to wide, now we want it to be made to be 1s and 0s for dummy coding. Currently, the data is either coded as a string (1), or NULL. All variables are currently a list (except for ID), I want to convert them to double while maintaining their binary status.
+
+```{r}
+
+# We will mutate across all variables and make them 1 or zero. If the list contained a 1, then it will stay a 1, if the values were anything else, it will be 0. 
+
+MedHx_Psych_Full <- MedHx_Psych_Full %>%
+    mutate(across(where(is.list), ~ as.numeric(ifelse(lengths(.) > 0 & !sapply(., is.null), 1, 0))))
+
+head(MedHx_Psych_Full)
+```
+
+#### General dummy codes
+
+Now, that we have this complete list of binary codes, I also want to have dummy codes for broad levels of mental health comorbidities. This will be helpful, as many of our variables have differences in spelling or capitalization. This will create a coding system to capture all variables that fall under a general umbrella (i.e. depression, anxiety, etc).
+
+```{r}
+
+# Let's create a global dummy variable for depression: This chunk will go row-by-row in the MedHx_Psych_Full dataframe. The mutate function will create a new variable called 'depression_any'. This new variable will be populated with a 1 if any of the following binary disorder variable are coded as a 1. If non of these disorders are coded as a 1, then 'depression_any' will be coded as a 0.
+
 MedHx_Psych_Full <- MedHx_Psych_Full %>%
   rowwise() %>%
    mutate(depression_any = as.numeric(any(c_across(c(`Major depressive disorder`, Depression, `Major depressive disorder (MDD)`, depression, `Unspecified depressive disorder`, `major depressive disorder (MDD)`, `situational depression`, `Major Depressive disorder (MDD)`, `Recurrent Major Depressive Disorder (HC CODE)`, `Post Partum Depression`)) == 1))) %>%
@@ -226,11 +228,58 @@ MedHx_Psych_Full <- MedHx_Psych_Full %>%
 # Same thing for Anxiety:
 MedHx_Psych_Full <- MedHx_Psych_Full %>%
   rowwise() %>%
-   mutate(anxiety_any = as.numeric(any(c_across(c()) == 1))) %>%
+   mutate(anxiety_any = as.numeric(any(c_across(c(Anxiety, `Generalized anxiety disorder`, anxiety, `Generalized anxiety disorder`, `Anxiety symptoms`, `Anxiety disorder`, `Occasional Anxiety`, `Social anxiety disorder`, `illness anxiety disorder`, `seizure anxiety`, `anxiety disorder`, `generalized anxiety disorder (GAD)`, `Anxiety Disorder`, `Illness anxiety Disorder`, `Generalized anxiety disorder (GAD)`)) == 1))) %>%
+  ungroup()
+
+# Same thing for PTSD
+MedHx_Psych_Full <- MedHx_Psych_Full %>%
+  rowwise() %>%
+   mutate(ptsd_any = as.numeric(any(c_across(c(PTSD, `Post traumatic stress disorder (PTSD)`, `Trauma and stress related disorder`, `Post Traumatic stress disorder (PTSD)`, `complex PTSD`, `post traumatic stress disorder (PTSD)`, `trauma and stress related disorder`, `C-PTSD`, Trauma)) == 1))) %>%
   ungroup()
 
 # Same thing for Bipolar
+MedHx_Psych_Full <- MedHx_Psych_Full %>%
+  rowwise() %>%
+   mutate(bipolar_any = as.numeric(any(c_across(c(`bipolar 1 disorder`, `Bipolar Disorder`, `Bipolar Disorder 1`, `Bipolar (type II)`, `Bipolar 1 disorder`, `Bipolar disorder`, `Bipolar II disorder`, `Bipolar Disorder II`, `Bipolar I Disorder`, `bipolar 2 disorder`, `bipolar type I`)) == 1))) %>%
+  ungroup()
+
+# Same thing for Borderline
+MedHx_Psych_Full <- MedHx_Psych_Full %>%
+  rowwise() %>%
+   mutate(borderline_any = as.numeric(any(c_across(c(`borderline personality disorder`, `Borderline Personality Disorder`, `borderline and prominent dissociation`, `Borderline personaliy disorder`, `Borderline personality Disorder`)) == 1))) %>%
+  ungroup()
+
+# Lastly, I also want a combined personality disorder dummy as well
+MedHx_Psych_Full <- MedHx_Psych_Full %>%
+  rowwise() %>%
+   mutate(pd_any = as.numeric(any(c_across(c(`Personality disorder`, `Obsessive compulsive personality disorder (OCPD)`, `schizoid personality`, `avoidant personality disorder`, `Antisocial Personality Disorder`, `Personality Disorder`)) == 1))) %>%
+  ungroup()
+
 ```
+
+### Further Reductions:
+
+Now that we've concatenated some of the data for some of the most common comorbidities, I want to get rid of the previously mentioned variables (i.e. variables assessing the same thing but typed slightly different). This will create a cleaner database that is easier to merge with the primary patient dataframe.
+
+```{r}
+
+# Let's just select the variables that we want to keep in our dataset:
+
+MedHx_Psych <- MedHx_Psych_Full %>% select(patient_id, `Obsessive compulsive personality disorder (OCPD)`, `schizoid personality`, `avoidant personality disorder`, `Antisocial Personality Disorder`, depression_any, anxiety_any, ptsd_any, bipolar_any, borderline_any, pd_any)
+
+```
+
+### Comorbidites Appendix:
+
+Great, data cleaning for comorbidities is complete. As of 2/17/2025, we have only cleaned mental health comorbidities. If you are interested in any other form of comorbidities, you can select whatever diagnosis you would want and follow along from "Data Concatenation" tab.
+
+![](images/clipboard-3083755900.png)
+
+Please use this code chunk to add in whatever comorbidity you may be interested in by adding a '\|' after the last value but within the quotes. I also suggest changing 'MedHx_Psych_Full to another name. This will pull any variable into the newly created dataset which is named whatever you like. Please do not change the code for what exists. Only add new things in by copying, pasting, and editing the newly pasted code.
+
+Note: Please notice how the first value is 'depress' rather than 'depression'. When looking through the variables, some diagnoses were labeled as 'depression' and some were labeled as 'depressive symptoms'. If I put 'Depression' in the quotes, it would not capture the 'depressive symptoms' variable. If this is the case for your variable of interest, I suggest using only as many characters as needed rather than spelling it out verbatim.
+
+Once you have done this, continue this trend by using the subsequent code to filter out anything you want. This can be done by copying the existing code, pasting, and then altering the name of the dataframes called in the code chunk to match your given dataframe name. E.g. alter any point that says MedHx_Psych_Full to {insert_your_data_name_here}. Control-F is your friend for this.
 
 # Data Overview:
 
