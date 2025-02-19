@@ -9,12 +9,16 @@ editor: visual
 ## Packages
 
 ```{r}
-library(gitcreds)
-library(readxl)
-library(tidyverse)
-library(psych)
-library(ggplot2)
-library(plotly) # Used for interactive charts from ggplot
+library(gitcreds)     # Required for pushing to Git for Version Control
+library(readxl)       # Helps us read in excel docs sheet-by-sheet
+library(tidyverse)    # Creates cleaner code and better readability
+library(psych)        # Helpful for checking data distributions
+library(ggplot2)      # The best visualization package 
+library(plotly)       # Used for interactive charts from ggplot
+library(MVN)          # Helpful for checking assumptions in MLR
+library(stringr)      # Helpful for manipulating strings
+library(RColorBrewer) # Makes charts look better
+library(forcats)      # Helps Order viz in pleasing ways
 ```
 
 ## Data Import
@@ -297,7 +301,14 @@ prop.table(table(patient_info$`tblPatient::Race`))
 prop.table(table(patient_info$c_insuranceAtBaseline))
 
 
-# It's difficult to see trends in insurance, let's plot it visually.
+
+```
+
+That is helpful, but I also want to visualize some confusing elements. Specifically, I want visualize the distribution of insurance types and race:
+
+```{r}
+
+# Let's start with insurance
 
 plot1 <- ggplot(patient_info, aes(x = c_insuranceAtBaseline)) +
             geom_bar() +
@@ -313,8 +324,7 @@ plot2 <- ggplot(patient_info, aes(x = `tblPatient::Race`)) +
             theme_minimal() +
             labs(title = "Race Distribution", x = "Race", y = "Count")
             theme(axis.text.x = element_text(angle = 90, hjust = 1))  
-ggplotly(plot2)
-
+ggplotly(plot2)   # Convert to interactive plotly chart
 ```
 
 We are looking at:
@@ -345,6 +355,324 @@ Before any actual analysis can be done, we'll need to do some intensive data cle
 
 Let's start with the most egregious offender: Insurance:
 
+What we'll need to do is
+
 ```{r}
-#Testing for GitHub
+
+# First, let's look at all the possible values of insurance before we concatenate
+
+unique(patient_info$c_insuranceAtBaseline)
+```
+
+That is quite a lot: Let's begin by combining values:
+
+#### **Medicaid/CHF - 55 entries**
+
+-   Medicaid
+
+-   Medicaid/Medicaid Health First
+
+-   Medicaid/Medicaid health first
+
+-   Colorado Access Medicaid/CO Access BH
+
+-   Colorado Health First
+
+-   Medicaid Health First
+
+-   Out of state Medicaid
+
+-   Colorado Medicaid/Medicaid Colorado Health First
+
+-   Rocky Mountain Health Plan Medicaid
+
+-   Denver Health Medicaid
+
+-   Medicaid Colorado Health First RAE 2
+
+-   CO Health First
+
+-   Colorado Community Health Alliance
+
+-   Colorado Medicaid Health First RAE5
+
+-   Colorado Medicaid RAE 3
+
+-   rae 3
+
+-   Colorado Medicaid
+
+-   Health Colorado- RAE 4
+
+-   Medicaid - Colorado Community Health Alliance
+
+-   Medicaid RAE 3
+
+-   Texas Medicaid
+
+-   Out of State Medicaid
+
+-   Health Colorado, Inc.
+
+-   Health First
+
+-   Colorado Access
+
+-   Health first
+
+-   COLORADO HEALTH FIRST
+
+-   CHF Community Health Alliance
+
+-   CHA
+
+-   Colorado Medicaid CCHA
+
+-   Colorado health first
+
+-   RAE 5
+
+-   RAE 2
+
+-   RAE 3
+
+-   rae 5
+
+-   UNLISTED MC
+
+-   DENVER HEALTH MEDICAID
+
+-   MEDICAID COLORADO HEALTH FIRST
+
+-   RAE 4
+
+-   comm Health
+
+-   Comm Health Alliance
+
+-   MMHP United Medicaid
+
+-   Colorado Health First - RAE3
+
+-   CO CHA
+
+-   CHF Community Alliance
+
+-   CHF RAE 3
+
+-   comm health alli
+
+-   CHF Region 5
+
+-   CHF region 3
+
+-   CHF RAE Region 3
+
+-   Comm Health Alli
+
+-   CCHA
+
+-   Community Health Alliance
+
+-   ER Health First
+
+-   WY Medicaid
+
+-   ROCKY MOUNTAIN HEALTH PLAN MC
+
+#### BC/BS - 22
+
+-   Anthem
+
+-   Anthem/Anthem BC/BS Local PPO
+
+-   Anthem Federal/Anthem BC BS Federal
+
+-   UCHealth Anthem
+
+-   Anthem/Anthem BC/BS
+
+-   Anthem BC/BS
+
+-   Anthem Pathway
+
+-   Anthem TRX BDCT NM POB
+
+-   Anthem BCBS
+
+-   UCHealth Anthem BC/BS
+
+-   Anthem Mountain Enhanced
+
+-   Anthem Federal
+
+-   CU Anthem
+
+-   Anthem BC/BS of California
+
+-   Anthem Federal BC/BS
+
+-   ANTHEM BC/BS FEDERAL PPO
+
+-   Anthem BCBS WY
+
+-   UC Health Anthem
+
+-   Medicare/Anthem
+
+-   Anthem CU
+
+-   Anthem bc/bs
+
+-   CU Med
+
+#### United - 23
+
+-   United/United Healthcare Choice
+
+-   United
+
+-   United/UMR POS
+
+-   United Medicare/United Healthcare
+
+-   Medicare/United
+
+-   United Medicare
+
+-   United UMR PPO
+
+-   United/United Health Choice Plus
+
+-   United/Medicare
+
+-   United Healthcare Choice Plus
+
+-   United Healthcare Choice
+
+-   United Healthcare
+
+-   United UMR
+
+-   UHC Choice Plus
+
+-   UNITED HEALTHCARE MC DUAL COMPLETE HMO
+
+-   united
+
+-   United/Nreca
+
+-   Rocky Mountain Health Plan
+
+-   Rocky Mountain Health Plans
+
+-   Rocky Mountain Health
+
+-   RMHP
+
+-   Rocky Mtn Health Plan
+
+-   RMHP United
+
+#### Cigna - 9
+
+-   Cigna/Cigna Local plus
+
+-   Cigna/Cigna POS
+
+-   Great West/Cigna
+
+-   Great West
+
+-   Cigna PPO
+
+-   Cigna POS
+
+-   Cigna Medicare
+
+-   cigna
+
+-   Great West - Cigna
+
+#### **Aetna - 7**
+
+-   Aetna
+
+-   Aetna/Medicare
+
+-   AETNA
+
+-   Aetna Whole Health
+
+-   Aetna and Cofinity
+
+-   Aetna POS
+
+-   Aetna Medicare
+
+#### Veterans - 11
+
+-   Tricare
+
+-   VA Administration
+
+-   Triwest Healthcare
+
+-   Triwest
+
+-   Va Veteran's Administration
+
+-   Tricare Health Net Prime-West
+
+-   Tricare Health Net West
+
+-   TriWest
+
+-   tricare health net
+
+-   VA
+
+-   TriCare
+
+This totals to 117 patients being insured normally and 58 patients in the Other category
+
+### Dummy variables:
+
+Now that we know which variables go where, we'll need to create a dummy variable to hold these values. For our purposes, we will create a categorical variable with 7 levels. 6 of these levels will hold the categories we described in the previous section, and the 7th will be for the 'Other' Category.
+
+```{r}
+
+# To create a specific variable, I'm going to use the stringr packages to create a new categorical variable based on these results. The str_detect function takes the original variable, that registers the patterns in the string given in quotes, and markes the new variable 'insurance' as having a category named after the '~'.
+
+# Wall of code incoming:
+
+
+patient_info <- patient_info %>%
+  mutate(insurance = case_when(
+    grepl("Medicaid|Medicaid Health First|Medicaid/Medicaid health first|Colorado Access Medicaid/CO Access BH|Colorado Health First|Medicaid Health First|Out of state Medicaid|Colorado Medicaid/Medicaid Colorado Health First|Rocky Mountain Health Plan Medicaid|Denver Health Medicaid|Medicaid Colorado Health First RAE 2|CO Health First|Colorado Community Health Alliance|Colorado Medicaid Health First RAE5|Colorado Medicaid RAE 3|rae 3|Colorado Medicaid|Health Colorado- RAE 4|Medicaid - Colorado Community Health Alliance|Medicaid RAE 3|Texas Medicaid|Out of State Medicaid|Health Colorado, Inc.|Health First|Colorado Access|Health first|COLORADO HEALTH FIRST|CHF Community Health Alliance|CHA|Colorado Medicaid CCHA|Colorado health first|RAE 5|RAE 2|RAE 3|rae 5|UNLISTED MC|DENVER HEALTH MEDICAID|MEDICAID COLORADO HEALTH FIRST|RAE 4|comm Health|Comm Health Alliance|MMHP United Medicaid|Colorado Health First - RAE3|CO CHA|CHF Community Alliance|CHF RAE 3|comm health alli|CHF Region 5|CHF region 3|CHF RAE Region 3|Comm Health Alli|CCHA|Community Health Alliance|ER Health First|WY Medicaid|ROCKY MOUNTAIN HEALTH PLAN MC", c_insuranceAtBaseline, ignore.case = TRUE) ~ "Medicaid/CHF",
+    
+    grepl("Anthem|Anthem Federal/Anthem BC/BS Local PPO|Anthem Federal/Anthem BC BS Federal|UCHealth Anthem|Anthem/Anthem BC/BS|Anthem BC/BS|Anthem Pathway|Anthem TRX BDCT NM POB|Anthem BCBS|UCHealth Anthem BC/BS|Anthem Mountain Enhanced|Anthem Federal|CU Anthem|Anthem BC/BS of California|Anthem Federal BC/BS|ANTHEM BC/BS FEDERAL PPO|Anthem BCBS WY|UC Health Anthem|Medicare/Anthem|Anthem CU|Anthem bc/bs|CU Med", c_insuranceAtBaseline, ignore.case = TRUE) ~ "BC/BS",
+               
+    grepl("United/United Health Choice|United|United/UMR POS|United Medicare/United Healthcare|Medicare/United|United Medicare|United UMR PPO|United/United Health Choice Plus|United/Medicare|United Healthcare Choice Plus|United Healthcare Choice|United Healthcare|United UMR|UHC Choice Plus|UNITED HEALTHCARE MC DUAL COMPLETE HMO|united|United/Nreca|Rocky Mountain Health Plan|Rocky Mountain Health Plans|Rocky Mountain Health|RMHP|Rocky Mtn Health Plan|RMHP United", c_insuranceAtBaseline, ignore.case = TRUE) ~ "United",
+               
+    grepl("Cigna/Cigna Local plus|Cigna/Cigna POS|Great West/Cigna|Great West|Cigna PPO|Cigna POS|Cigna Medicare|cigna|Great West - Cigna", c_insuranceAtBaseline, ignore.case = TRUE) ~ "Cigna",
+    
+    grepl("Aetna|Aetna/Medicare|AETNA|Aetna Whole Health|Aetna and Cofinity|Aetna POS|Aetna Medicare", c_insuranceAtBaseline, ignore.case = TRUE) ~ "Aetna",
+    
+    grepl("Tricare|VA Administration|Triwest Healthcare|Triwest|Va Veteran's Administration|Tricare Health Net Prime_West|Tricare Health Net West|TriWest|tricare health net|VA|TriCare|", c_insuranceAtBaseline, ignore.case = TRUE) ~ "Veteran/ASM",
+    
+    TRUE ~ "Other"  # Default category for everything else
+  ))
+```
+
+Great, now let's plot this again to see if it looks cleaner:
+
+```{r}
+plot1 <- ggplot(patient_info, aes(x = fct_rev(fct_infreq(insurance)), fill = insurance)) +
+            geom_bar() +
+            scale_fill_brewer(palette = "Set3") +
+            theme_minimal() +
+            labs(title = "Insurance Distributions", x = "Insurance Plans", y = "Count") + 
+            theme(axis.text.x = element_text(angle = 90, hjust = 1))  
+ggplotly(plot1)   # Convert to interactive plotly chart
 ```
