@@ -67,6 +67,7 @@ MedHx$patient_id <- MedHx$`tblPatient::EXT_ID`
 
 MedHx <- MedHx %>% select(-`tblPatient::EXT_ID`)
 
+# Transforming from long format to wide format:
 
 MedHx_Wide <- pivot_wider(MedHx, id_cols = patient_id, names_from = condition, values_from = -c(patient_id,condition, diagnosisClass))
 
@@ -223,6 +224,7 @@ Now, that we have this complete list of binary codes, I also want to have dummy 
 ```{r}
 
 # Let's create a global dummy variable for depression: This chunk will go row-by-row in the MedHx_Psych_Full dataframe. The mutate function will create a new variable called 'depression_any'. This new variable will be populated with a 1 if any of the following binary disorder variable are coded as a 1. If non of these disorders are coded as a 1, then 'depression_any' will be coded as a 0.
+
 
 MedHx_Psych_Full <- MedHx_Psych_Full %>%
   rowwise() %>%
@@ -518,8 +520,6 @@ That is quite a lot: Let's begin by combining values:
 
 -   UC Health Anthem
 
--   Medicare/Anthem
-
 -   Anthem CU
 
 -   Anthem bc/bs
@@ -534,17 +534,9 @@ That is quite a lot: Let's begin by combining values:
 
 -   United/UMR POS
 
--   United Medicare/United Healthcare
-
--   Medicare/United
-
--   United Medicare
-
 -   United UMR PPO
 
 -   United/United Health Choice Plus
-
--   United/Medicare
 
 -   United Healthcare Choice Plus
 
@@ -555,8 +547,6 @@ That is quite a lot: Let's begin by combining values:
 -   United UMR
 
 -   UHC Choice Plus
-
--   UNITED HEALTHCARE MC DUAL COMPLETE HMO
 
 -   united
 
@@ -588,8 +578,6 @@ That is quite a lot: Let's begin by combining values:
 
 -   Cigna POS
 
--   Cigna Medicare
-
 -   cigna
 
 -   Great West - Cigna
@@ -598,8 +586,6 @@ That is quite a lot: Let's begin by combining values:
 
 -   Aetna
 
--   Aetna/Medicare
-
 -   AETNA
 
 -   Aetna Whole Health
@@ -607,8 +593,6 @@ That is quite a lot: Let's begin by combining values:
 -   Aetna and Cofinity
 
 -   Aetna POS
-
--   Aetna Medicare
 
 #### Veterans - 11
 
@@ -634,6 +618,56 @@ That is quite a lot: Let's begin by combining values:
 
 -   TriCare
 
+**Medicare - 24**
+
+-   Medicare/Medicare A and B
+
+-   Medicare
+
+-   Medicare A and B
+
+-   United/Medicare
+
+-   Humana Medicare
+
+-   Humana medicare
+
+-   Medicare A & B
+
+-   Denver Health Medicare
+
+-   A & B
+
+-   A&B
+
+-   Medicare A&B
+
+-   A &B
+
+-   A and B
+
+-   part A only
+
+-   Humana/Medicare
+
+-   KaiserMedicare
+
+-   Medicare/Anthem
+
+-   United Medicare/United Healthcare
+
+-   Medicare/United
+
+-   United Medicare
+
+-   UNITED HEALTHCARE MC DUAL COMPLETE HMO
+
+-   Cigna Medicare
+
+-   Aetna/Medicare
+
+-   Aetna Medicare
+
 This totals to 117 patients being insured normally and 58 patients in the Other category
 
 ### Dummy variables:
@@ -650,16 +684,16 @@ Now that we know which variables go where, we'll need to create a dummy variable
 patient_info <- patient_info %>%
   mutate(insurance = case_when(
     grepl("Medicaid|Medicaid Health First|Medicaid/Medicaid health first|Colorado Access Medicaid/CO Access BH|Colorado Health First|Medicaid Health First|Out of state Medicaid|Colorado Medicaid/Medicaid Colorado Health First|Rocky Mountain Health Plan Medicaid|Denver Health Medicaid|Medicaid Colorado Health First RAE 2|CO Health First|Colorado Community Health Alliance|Colorado Medicaid Health First RAE5|Colorado Medicaid RAE 3|rae 3|Colorado Medicaid|Health Colorado- RAE 4|Medicaid - Colorado Community Health Alliance|Medicaid RAE 3|Texas Medicaid|Out of State Medicaid|Health Colorado, Inc.|Health First|Colorado Access|Health first|COLORADO HEALTH FIRST|CHF Community Health Alliance|CHA|Colorado Medicaid CCHA|Colorado health first|RAE 5|RAE 2|RAE 3|rae 5|UNLISTED MC|DENVER HEALTH MEDICAID|MEDICAID COLORADO HEALTH FIRST|RAE 4|comm Health|Comm Health Alliance|MMHP United Medicaid|Colorado Health First - RAE3|CO CHA|CHF Community Alliance|CHF RAE 3|comm health alli|CHF Region 5|CHF region 3|CHF RAE Region 3|Comm Health Alli|CCHA|Community Health Alliance|ER Health First|WY Medicaid|ROCKY MOUNTAIN HEALTH PLAN MC", c_insuranceAtBaseline, ignore.case = TRUE) ~ "Medicaid/CHF",
+
     
-    grepl("Anthem|Anthem Federal/Anthem BC/BS Local PPO|Anthem Federal/Anthem BC BS Federal|UCHealth Anthem|Anthem/Anthem BC/BS|Anthem BC/BS|Anthem Pathway|Anthem TRX BDCT NM POB|Anthem BCBS|UCHealth Anthem BC/BS|Anthem Mountain Enhanced|Anthem Federal|CU Anthem|Anthem BC/BS of California|Anthem Federal BC/BS|ANTHEM BC/BS FEDERAL PPO|Anthem BCBS WY|UC Health Anthem|Medicare/Anthem|Anthem CU|Anthem bc/bs|CU Med", c_insuranceAtBaseline, ignore.case = TRUE) ~ "BC/BS",
-               
-    grepl("United/United Health Choice|United|United/UMR POS|United Medicare/United Healthcare|Medicare/United|United Medicare|United UMR PPO|United/United Health Choice Plus|United/Medicare|United Healthcare Choice Plus|United Healthcare Choice|United Healthcare|United UMR|UHC Choice Plus|UNITED HEALTHCARE MC DUAL COMPLETE HMO|united|United/Nreca|Rocky Mountain Health Plan|Rocky Mountain Health Plans|Rocky Mountain Health|RMHP|Rocky Mtn Health Plan|RMHP United", c_insuranceAtBaseline, ignore.case = TRUE) ~ "United",
-               
-    grepl("Cigna/Cigna Local plus|Cigna/Cigna POS|Great West/Cigna|Great West|Cigna PPO|Cigna POS|Cigna Medicare|cigna|Great West - Cigna", c_insuranceAtBaseline, ignore.case = TRUE) ~ "Cigna",
+    grepl("Anthem|Anthem/Anthem BC/BS Local PPO|Anthem Federal/Anthem BC BS Federal|UCHealth Anthem|Anthem/Anthem BC/BS|Anthem BC/BS|Anthem Pathway|Anthem TRX BDCT NM POB|Anthem BCBS|UCHealth Anthem BC/BS|Anthem Mountain Enhanced|Anthem Federal|CU Anthem|Anthem BC/BS of California|Anthem Federal BC/BS|ANTHEM BC/BS FEDERAL PPO|Anthem BCBS WY|UC Health Anthem|Anthem CU|Anthem bc/bs|CU Med|United/United Healthcare Choice|United|United/UMR POS|United UMR PPO|United/United Health Choice Plus|United Healthcare Choice Plus|United Healthcare Choice|United Healthcare|United UMR|UHC Choice Plus|united|United/Nreca|Rocky Mountain Health Plan|Rocky Mountain Health Plans|Rocky Mountain Health|RMHP|Rocky Mtn Health Plan|RMHP United|Cigna/Cigna Local plus|Cigna/Cigna POS|Great West/Cigna|Great West|Cigna PPO|Cigna POS|cigna|Great West - Cigna|Aetna|AETNA|Aetna Whole Health|Aetna and Cofinity|Aetna POS", c_insuranceAtBaseline, ignore.case = TRUE) ~ "Private",
     
-    grepl("Aetna|Aetna/Medicare|AETNA|Aetna Whole Health|Aetna and Cofinity|Aetna POS|Aetna Medicare", c_insuranceAtBaseline, ignore.case = TRUE) ~ "Aetna",
     
-    grepl("Tricare|VA Administration|Triwest Healthcare|Triwest|Va Veteran's Administration|Tricare Health Net Prime_West|Tricare Health Net West|TriWest|tricare health net|VA|TriCare|", c_insuranceAtBaseline, ignore.case = TRUE) ~ "Veteran/ASM",
+    grepl("Medicare/Medicare A and B|Medicare|Medicare A and B|United/Medicare|Humana Medicare|Humana medicare|Denver Health Medicare|A & B|A&B|Medicare A&B|A &B|A and B|part A only|Humana/Medicare|Kaiser Medicare|Medicare/Anthem|United Medicare/United Healthcare|Medicare/United|United Medicare|UNITED HEALTHCARE MC DUAL COMPLETE HMO|Cigna Medicare|Aetna/Medicare", c_insuranceAtBaseline, ignore.case = TRUE) ~ "Medicare",
+    
+      
+    
+    grepl("Tricare|VA Administration|Triwest Healthcare|Triwest|Va Veteran's Administration|Tricare Health Net Prime_West|Tricare Health Net West|TriWest|tricare health net|VA|TriCare", c_insuranceAtBaseline, ignore.case = TRUE) ~ "Veteran/ASM",
     
     TRUE ~ "Other"  # Default category for everything else
   ))
