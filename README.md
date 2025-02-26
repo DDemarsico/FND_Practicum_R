@@ -1,5 +1,12 @@
 # FND_Practicum
 FND Practicum Data
-A line I wrote on my local computer
-I've changed the ReadMe file lol
-test # 2
+
+The goal with this repository is to store all of the projects associated with my time at the FND clinic. 
+
+This should contain:
+
+A data cleaning SOP/Code
+
+Small scale analyses 
+
+And one larger analysis for the Capstone project
