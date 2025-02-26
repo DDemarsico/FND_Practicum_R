@@ -1,0 +1,311 @@
+---
+title: "ASM Correlations"
+format: html
+editor: visual
+---
+
+## Correlations for ASM
+
+Mackenzi had asked me to look into associations between the top 10 anti-epileptic meds and individuals who have only a functional seizures, and those who have a dual diagnosis of functional seizures AND epilepsy.
+
+Furthermore, we want to look into specific correlations for individuals who have comorbid: mood disorders, Migraines, or Chronic pain.
+
+## Packages:
+
+```{r}
+library(tidyverse)
+library(readxl)
+library(corrplot)
+library(epitools)
+```
+
+## Data Import
+
+```{r}
+
+# Define the file path
+file_path <- "C:\\Users\\domin\\Downloads\\ASM.xlsx"
+
+# Read the first sheet
+asm <- read_excel(file_path, sheet = 1) 
+```
+
+## Top 10 Meds:
+
+Our list of the most common meds are:
+
+-   Levetiracetam
+
+-   Topiramate
+
+-   Sodium Valproate
+
+-   Lamotrigine
+
+-   Gabapentin
+
+-   Oxcarbazepine
+
+-   Zonisamide
+
+-   Phenytoin
+
+-   Lacosamide
+
+-   Carbamazepine
+
+# Correlations
+
+I want to start with broad strokes of correlations and then increasing become more nuanced. Let's start with just the medications and dual diagnosis:
+
+## Meds + Dual Dx
+
+Let's compare those 10 meds with our binary outcome variable Dual_Dx
+
+```{r}
+
+# First, let's change Dual_Dx to a number:
+asm$Dual_Dx <- ifelse(asm$Dual_Dx == "Yes", 1, 0)
+
+
+# Loop through all medication variables and run Chi-Square tests
+for (med in c("Med_Levetiracetam", "Med_Topiramate", "Med_Sodium Valproate", "Med_Lamotrigine", "Med_Gabapentin", "Med_Oxcarbazepine", "Med_Zonisamide", "Med_Phenytoin", "Med_Lacosamide", "Med_Carbamazepine")) {
+  tab <- table(asm$Dual_Dx, asm[[med]])  # Create a contingency table
+  chi_test <- chisq.test(tab)  # Perform Chi-Square test
+  cat("\nChi-Square Test for", med, "\n")
+  print(chi_test)
+}
+
+```
+
+Great, we have significant results for:
+
+-   Sodium Valproate (p = 1.156e-05)
+
+-   Gabapentin (p = .02302)
+
+-   Zonisamind (p = .001874)
+
+-   Phenytouin ( p = 5.205e-09)
+
+-   Lacosamide (p = .01844)
+
+-   Carbamazepine (p = 4.921e-07)
+
+Now we need to examine direction to make causal statements:
+
+### Assessing Directionality
+
+```{r}
+
+# Let's look at the Sodium Valproate first:
+table(asm$Dual_Dx, asm$`Med_Sodium Valproate`)
+
+# Odds ratio for strength of association:
+or_sodiumVal <- oddsratio(table(asm$Dual_Dx, asm$`Med_Sodium Valproate`))
+print(or_sodiumVal$measure)
+
+# On average, people with a dual dx are 2.53 times more likely to use Sodium Valproate than those without a dual diagnosis.
+
+```
+
+Great, this tracks. Individuals who have a separate diagnosis of epilepsy tend to have a 2.5 times higher rate of use of sodium valproate.
+
+However, we do have 4 medications that are not statistically significant in the chi-square test. This strikes me as strange because why would there NOT be a difference in these groups. Especially if one of the groups does not have an epilepsy diagnosis.
+
+Let's look at topiramate for example:
+
+```{r}
+table(asm$Dual_Dx, asm$Med_Topiramate)
+
+# Odds ratio for strength of association:
+or_topiramte <- oddsratio(table(asm$Dual_Dx, asm$Med_Topiramate))
+print(or_topiramte$measure)
+
+# On average, those with a dual dx are .09 times more likely to use topiramate. not clinically significant. 
+```
+
+Makes sense, so these groups are receiving a epilepsy drug at roughly the same rate as a those with an epilepsy dx. That's interesting.
+
+## Adding in MedHx:
+
+Ok, now that we've built the framework, let's move on to further splitting these groups into their respective categories based on comorbidities.
+
+We'll make 3 separate databases, one for those with mood disorders, one for migraine, and one for chronic pain.
+
+### Mood disorder:
+
+Mood disorders are classified as any of the following:
+
+-   GAD, Anxiety, depression, major depressive disorder, bipolar disorder, and mood disorder.
+
+Let's create this variable and create a new dataframe:
+
+```{r}
+
+# Let's start by making our new binary variable for mood disorders:
+
+asm <- asm %>%
+  mutate(Mood_Disorder = ifelse(Hist_Depression == 1 | `Hist_Generalized Anxiety` == 1 | Hist_Anxiety == 1 | `Hist_Major depressive disorder` == 1 | Hist_Bipolar == 1 | `Hist_Mood disorder` == 1, 1, 0))
+
+# Now let's filter the database to only have patients with a mood disorder
+
+asm_mood <- asm %>% filter(Mood_Disorder == 1)
+
+
+```
+
+Great, we have a working database, now let's see run our previous code on this one and see our results:
+
+```{r}
+# Loop through all medication variables and run Chi-Square tests
+for (med in c("Med_Levetiracetam", "Med_Topiramate", "Med_Sodium Valproate", "Med_Lamotrigine", "Med_Gabapentin", "Med_Oxcarbazepine", "Med_Zonisamide", "Med_Phenytoin", "Med_Lacosamide", "Med_Carbamazepine")) {
+  tab <- table(asm_mood$Dual_Dx, asm_mood[[med]])  # Create a contingency table
+  chi_test <- chisq.test(tab)  # Perform Chi-Square test
+  cat("\nChi-Square Test for", med, "\n")
+  print(chi_test)
+}
+```
+
+Significant results:
+
+Sodium Valproate, Zonisamide, Phenytoin, Lacosamide, Cabamazepine:
+
+Lamotragine and Oxcarbazepine are approaching significance. Let's run our two tests and see how this fits:
+
+```{r}
+
+# Let's run this with Sodium valproate as an example
+
+table(asm_mood$Dual_Dx, asm_mood$`Med_Sodium Valproate`)
+
+# Odds ratio for strength of association:
+or_sodium_mood <- oddsratio(table(asm_mood$Dual_Dx, asm_mood$`Med_Sodium Valproate`))
+print(or_sodium_mood$measure)
+
+# Individuals with a dual diagnosis are 2.5 times more likely to take sodium valproate.
+```
+
+Let's do the same but for a non-significant value: Lamotragine:
+
+```{r}
+table(asm_mood$Dual_Dx, asm_mood$Med_Lamotrigine)
+
+# Odds ratio for strength of association:
+or_lamotragine_mood <- oddsratio(table(asm_mood$Dual_Dx, asm_mood$Med_Lamotrigine))
+print(or_lamotragine_mood$measure)
+
+# Individuals who have a dual dx are .61 times more likely to take lamotrigine than those who do not have a dual dx. Not clinically significant.
+```
+
+Similar story with mood disorders. Let's break this down to the other two groups and see if the story is the same.
+
+### Migraine:
+
+```{r}
+# Let's start by making our new binary variable for migraine:
+
+asm <- asm %>%
+  mutate(migraine = ifelse(Hist_Migraine == 1 | Hist_Headache == 1, 1, 0))
+
+# Now let's filter the database to only have patients with a mood disorder
+
+asm_migraine <- asm %>% filter(migraine == 1)
+```
+
+Same as before, let's run our function to assess chi-square values:
+
+```{r}
+# Loop through all medication variables and run Chi-Square tests
+for (med in c("Med_Levetiracetam", "Med_Topiramate", "Med_Sodium Valproate", "Med_Lamotrigine", "Med_Gabapentin", "Med_Oxcarbazepine", "Med_Zonisamide", "Med_Phenytoin", "Med_Lacosamide", "Med_Carbamazepine")) {
+  tab <- table(asm_migraine$Dual_Dx, asm_migraine[[med]])  # Create a contingency table
+  chi_test <- chisq.test(tab)  # Perform Chi-Square test
+  cat("\nChi-Square Test for", med, "\n")
+  print(chi_test)
+}
+```
+
+Significant results:
+
+-   Sodium Valproate, Zonisamide, Phenytoin, Lacosamide, Carbamazepine
+
+Same story: let's look at odds ratios to determine direction:
+
+```{r}
+
+table(asm_migraine$Dual_Dx, asm_migraine$`Med_Sodium Valproate`)
+
+# Odds ratio for strength of association:
+or_sodium_migraine <- oddsratio(table(asm_migraine$Dual_Dx, asm_migraine$`Med_Sodium Valproate`))
+print(or_sodium_migraine$measure)
+
+#Individuals with a dual dx are 3.2 times more likey to use sodium valproate on average. Statistically significant.
+```
+
+Now with a non-significant:
+
+```{r}
+
+table(asm_migraine$Dual_Dx, asm_migraine$Med_Lamotrigine)
+
+# Odds ratio for strength of association:
+or_lamotrigine_migraine <- oddsratio(table(asm_migraine$Dual_Dx, asm_migraine$Med_Lamotrigine))
+print(or_lamotrigine_migraine$measure)
+
+# Individuals with a dual dx are 1.69 times more likely to take lamotrigine when compared to those without a dual dx. not clinically significant.
+```
+
+Same story. Let's check chronic pain just in case.
+
+### Chronic Pain:
+
+```{r}
+# Let's start by making our new binary variable for migraine:
+
+asm <- asm %>%
+  mutate(chronic = ifelse(`Hist_Chronic Pain` == 1, 1, 0))
+
+# Now let's filter the database to only have patients with a mood disorder
+
+asm_chronic <- asm %>% filter(chronic == 1)
+```
+
+Same as before, let's run our function for chronic pain:
+
+```{r}
+# Loop through all medication variables and run Chi-Square tests
+for (med in c("Med_Levetiracetam", "Med_Topiramate", "Med_Sodium Valproate", "Med_Lamotrigine", "Med_Gabapentin", "Med_Oxcarbazepine", "Med_Zonisamide", "Med_Phenytoin", "Med_Lacosamide", "Med_Carbamazepine")) {
+  tab <- table(asm_chronic$Dual_Dx, asm_chronic[[med]])  # Create a contingency table
+  chi_test <- chisq.test(tab)  # Perform Chi-Square test
+  cat("\nChi-Square Test for", med, "\n")
+  print(chi_test)
+}
+```
+
+Statistically significant:
+
+-   Sodium Valproate, Carbamazepine (low N),
+
+Same as before, let's check directionality:
+
+```{r}
+table(asm_chronic$Dual_Dx, asm_chronic$`Med_Sodium Valproate`)
+
+# Odds ratio for strength of association:
+or_sodium_chronic <- oddsratio(table(asm_chronic$Dual_Dx, asm_chronic$`Med_Sodium Valproate`))
+print(or_sodium_chronic$measure)
+
+# Individuals with a dual diagnosis are 2.83 times more likely to be prescribed sodium valproate when compared to individuals without a dual dx. Stat sig.
+```
+
+Now for non-significant
+
+```{r}
+table(asm_chronic$Dual_Dx, asm_chronic$Med_Lamotrigine)
+
+# Odds ratio for strength of association:
+or_lamotrigine_chronic <- oddsratio(table(asm_chronic$Dual_Dx, asm_chronic$Med_Lamotrigine))
+print(or_lamotrigine_chronic$measure)
+
+# Individuals with a dual diagnosis are 2.68 times more likely to use lamotrigine when compared to those without a dual dx. Not clinicall significant.
+```
