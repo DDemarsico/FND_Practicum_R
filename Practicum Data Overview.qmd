@@ -710,3 +710,78 @@ plot1 <- ggplot(patient_info, aes(x = fct_rev(fct_infreq(insurance)), fill = ins
             theme(axis.text.x = element_text(angle = 90, hjust = 1))  
 ggplotly(plot1)   # Convert to interactive plotly chart
 ```
+
+Excellent! Our insurance distributions look much more balanced now. Private insurance and Medicaid users have the largest amount of patients. Medicare and Veteran's care follow behind.
+
+## Race:
+
+Given the rather shallow distributions of race, it makes sense to categorize our race variable as White and Non-White. Per usual, white individuals make up over 70% of the FND clinic's patient population. Combining this into a binary variable will give us more power to assess the effects of treatment on our non-white patients with more efficiency rather than comparing super small numbers.
+
+```{r}
+
+patient_info <- patient_info %>%
+  mutate(race = case_when(
+    grepl("White", `tblPatient::Race`, ignore.case = TRUE) ~ "White",
+    
+    TRUE ~ "Other"  # Default category for everything else
+  ))      
+          
+```
+
+```{r}
+plot2 <- ggplot(patient_info, aes(x = fct_rev(fct_infreq(race)), fill = race)) +
+            geom_bar() +
+            scale_fill_brewer(palette = "Set1") +
+            theme_minimal() +
+            labs(title = "Race Distributions", x = "Race Binary Variable", y = "Count") + 
+            theme(axis.text.x = element_text(angle = 90, hjust = 1))  
+ggplotly(plot2)   # Convert to interactive plotly chart
+```
+
+This distribution, while still very skewed, gives us a much larger N (n = 257) to use to assess differences between white and non-white patients
+
+## Disability
+
+Disability has a wide variety of different forms of for specific patients. There are 16 different categories for Disability. For simplicity, I want to separate this variable into a binary variables for patients that are on disability and those that do not.
+
+Please note: the no disability category does not account for patients who are attempting to get disability. If you want this, please change this code:
+
+```{r}
+unique(patient_info$`tblDisability::type`)
+```
+
+-   No Disability
+
+    -   Not Pursuing
+
+    -   Denied
+
+    -   SS Denied
+
+    -   Interested
+
+    -   Pursuing
+
+    -   Retired
+
+```{r}
+patient_info <- patient_info %>%
+  mutate(disability = case_when(
+    grepl("Not Pursuing|Denied|SS Denied|Interested|Pursuing|Retired", `tblDisability::type`, ignore.case = TRUE) ~ "No Disability",
+    
+    TRUE ~ "Disability"  # Default category for everything else
+  )) 
+```
+
+Now let's plot this and see our result:
+
+```{r}
+
+plot4 <- ggplot(patient_info, aes(x = fct_rev(fct_infreq(disability)), fill = disability)) +
+            geom_bar() +
+            scale_fill_brewer(palette = "Set1") +
+            theme_minimal() +
+            labs(title = "Race Distributions", x = "Race Binary Variable", y = "Count") + 
+            theme(axis.text.x = element_text(angle = 90, hjust = 1))  
+ggplotly(plot4) 
+```
