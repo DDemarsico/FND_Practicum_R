@@ -682,11 +682,10 @@ Now that we know which variables go where, we'll need to create a dummy variable
 
 
 patient_info <- patient_info %>%
-  mutate(insurance = case_when(
+  mutate(insurance = case_when(grepl("Anthem|Anthem/Anthem BC/BS Local PPO|Anthem Federal/Anthem BC BS Federal|UCHealth Anthem|Anthem/Anthem BC/BS|Anthem BC/BS|Anthem Pathway|Anthem TRX BDCT NM POB|Anthem BCBS|UCHealth Anthem BC/BS|Anthem Mountain Enhanced|Anthem Federal|CU Anthem|Anthem BC/BS of California|Anthem Federal BC/BS|ANTHEM BC/BS FEDERAL PPO|Anthem BCBS WY|UC Health Anthem|Anthem CU|Anthem bc/bs|CU Med|United/United Healthcare Choice|United|United/UMR POS|United UMR PPO|United/United Health Choice Plus|United Healthcare Choice Plus|United Healthcare Choice|United Healthcare|United UMR|UHC Choice Plus|united|United/Nreca|Rocky Mountain Health Plan|Rocky Mountain Health Plans|Rocky Mountain Health|RMHP|Rocky Mtn Health Plan|RMHP United|Cigna/Cigna Local plus|Cigna/Cigna POS|Great West/Cigna|Great West|Cigna PPO|Cigna POS|cigna|Great West - Cigna|Aetna|AETNA|Aetna Whole Health|Aetna and Cofinity|Aetna POS", c_insuranceAtBaseline, ignore.case = TRUE) ~ "Private",
+        
     grepl("Medicaid|Medicaid Health First|Medicaid/Medicaid health first|Colorado Access Medicaid/CO Access BH|Colorado Health First|Medicaid Health First|Out of state Medicaid|Colorado Medicaid/Medicaid Colorado Health First|Rocky Mountain Health Plan Medicaid|Denver Health Medicaid|Medicaid Colorado Health First RAE 2|CO Health First|Colorado Community Health Alliance|Colorado Medicaid Health First RAE5|Colorado Medicaid RAE 3|rae 3|Colorado Medicaid|Health Colorado- RAE 4|Medicaid - Colorado Community Health Alliance|Medicaid RAE 3|Texas Medicaid|Out of State Medicaid|Health Colorado, Inc.|Health First|Colorado Access|Health first|COLORADO HEALTH FIRST|CHF Community Health Alliance|CHA|Colorado Medicaid CCHA|Colorado health first|RAE 5|RAE 2|RAE 3|rae 5|UNLISTED MC|DENVER HEALTH MEDICAID|MEDICAID COLORADO HEALTH FIRST|RAE 4|comm Health|Comm Health Alliance|MMHP United Medicaid|Colorado Health First - RAE3|CO CHA|CHF Community Alliance|CHF RAE 3|comm health alli|CHF Region 5|CHF region 3|CHF RAE Region 3|Comm Health Alli|CCHA|Community Health Alliance|ER Health First|WY Medicaid|ROCKY MOUNTAIN HEALTH PLAN MC", c_insuranceAtBaseline, ignore.case = TRUE) ~ "Medicaid/CHF",
 
-    
-    grepl("Anthem|Anthem/Anthem BC/BS Local PPO|Anthem Federal/Anthem BC BS Federal|UCHealth Anthem|Anthem/Anthem BC/BS|Anthem BC/BS|Anthem Pathway|Anthem TRX BDCT NM POB|Anthem BCBS|UCHealth Anthem BC/BS|Anthem Mountain Enhanced|Anthem Federal|CU Anthem|Anthem BC/BS of California|Anthem Federal BC/BS|ANTHEM BC/BS FEDERAL PPO|Anthem BCBS WY|UC Health Anthem|Anthem CU|Anthem bc/bs|CU Med|United/United Healthcare Choice|United|United/UMR POS|United UMR PPO|United/United Health Choice Plus|United Healthcare Choice Plus|United Healthcare Choice|United Healthcare|United UMR|UHC Choice Plus|united|United/Nreca|Rocky Mountain Health Plan|Rocky Mountain Health Plans|Rocky Mountain Health|RMHP|Rocky Mtn Health Plan|RMHP United|Cigna/Cigna Local plus|Cigna/Cigna POS|Great West/Cigna|Great West|Cigna PPO|Cigna POS|cigna|Great West - Cigna|Aetna|AETNA|Aetna Whole Health|Aetna and Cofinity|Aetna POS", c_insuranceAtBaseline, ignore.case = TRUE) ~ "Private",
     
     
     grepl("Medicare/Medicare A and B|Medicare|Medicare A and B|United/Medicare|Humana Medicare|Humana medicare|Denver Health Medicare|A & B|A&B|Medicare A&B|A &B|A and B|part A only|Humana/Medicare|Kaiser Medicare|Medicare/Anthem|United Medicare/United Healthcare|Medicare/United|United Medicare|UNITED HEALTHCARE MC DUAL COMPLETE HMO|Cigna Medicare|Aetna/Medicare", c_insuranceAtBaseline, ignore.case = TRUE) ~ "Medicare",
@@ -697,6 +696,9 @@ patient_info <- patient_info %>%
     
     TRUE ~ "Other"  # Default category for everything else
   ))
+
+
+
 ```
 
 Great, now let's plot this again to see if it looks cleaner:
@@ -784,4 +786,198 @@ plot4 <- ggplot(patient_info, aes(x = fct_rev(fct_infreq(disability)), fill = di
             labs(title = "Race Distributions", x = "Race Binary Variable", y = "Count") + 
             theme(axis.text.x = element_text(angle = 90, hjust = 1))  
 ggplotly(plot4) 
+```
+
+## Onset/Dx time (Months)
+
+I want to look at the time between symptom onset and diagnosis. Currently the variable is a string. Let's assess the unique values to make sure conversion to a double is feasible.
+
+```{r}
+unique(patient_info$`tblFND::c_TimeBetweenOnsetAndDiagnosisMonths`)
+```
+
+Ok, so everything can be an integer. But we'll need to switch a couple of things. First off, it looks like the time in months isn't consistent in this dataset. Some of the values are input as days. It looks like everything greater than \|20,000\| needs to be divided by 30.
+
+```{r}
+patient_info$Sx_Dx_time <- as.numeric(patient_info$`tblFND::c_TimeBetweenOnsetAndDiagnosisMonths`)
+```
+
+Great, the "?" and NA variable will be marked as NA due to coercion. Everything is numeric. Now let's change the variable to alter the day values into month.
+
+```{r}
+
+# Divide the observations that have an absolute value greater than 20000 by 31
+patient_info$Sx_Dx_time <- ifelse(abs(patient_info$Sx_Dx_time) > 20000, patient_info$Sx_Dx_time / 31, patient_info$Sx_Dx_time)
+
+# Now make all observations below 20000 absolute values:
+patient_info$Sx_Dx_time <- abs(patient_info$Sx_Dx_time)
+
+# Review of all unique entries
+unique(patient_info$Sx_Dx_time)
+```
+
+## Trauma + Amount
+
+We'll deal with two variables in this section: Trauma and \# of traumatic events. Both of these variables are strings. I want both of them to be double. I want Trauma to be binary with a label for 1 being trauma and 0 being no trauma. I want \# of events to be a continuous variable.
+
+```{r}
+
+# Let's check both variables for unique values, just in case:
+unique(patient_info$`tblFND::traumaHX`)
+
+# Ok, this is sufficient. I will move Unknown into NA as well.
+patient_info$trauma <- ifelse(patient_info$`tblFND::traumaHX` == "Yes", 1, 0)
+summary(patient_info$trauma)
+
+# Now let's check unique values for # of events
+unique(patient_info$`tblFND::c_#ofTraumaEvents`)
+
+# Great, everything is all set, let' set this to numeric
+patient_info$trauma_events <- as.numeric(patient_info$`tblFND::c_#ofTraumaEvents`)
+summary(patient_info$trauma_events)
+```
+
+## Baseline Frequency:
+
+This one is a bit interesting, as the value of freqBaseline is different based on the category in baselineFreq. So first, we'll change the values to numeric, then we can alter the values to fit better into our plan.
+
+```{r}
+
+#First, let's change baseline amount to numeric.
+patient_info$baseline_seizure <- as.numeric(patient_info$`tblFND::freqBaseline`)
+unique(patient_info$baseline_seizure)
+
+# Great, now let's start transforming the variable based on baselinFreq. Let's start with the month variable.
+patient_info$baseline_seizure <- ifelse(patient_info$`tblFND::baselineFreq` == "Month", patient_info$baseline_seizure / 4, patient_info$baseline_seizure)
+
+# Now we want to do the same thing, but for the day category. If it's in the day category, make it multiplied by 7.
+patient_info$baseline_seizure <- ifelse(patient_info$`tblFND::baselineFreq` == "Day", patient_info$baseline_seizure * 7, patient_info$baseline_seizure)
+
+# Review:
+summary(patient_info$baseline_seizure)
+
+# The max value of 1400 seems odd, let's check the unique values and see what subject this is.
+unique(patient_info$baseline_seizure)
+which(patient_info$baseline_seizure == 1400)
+
+# Ok, so we are finding that there are a few patients that have exceptionally high amounts. I suspect that these are data entry errors. For our purposes I will be moving them to N/A in order to better see the data. I will list their observation numbers and total number of weekly cases if they do end up being accurate.
+# Subject 202: 1260
+# Subject 454 & 482: 1225
+# Subject 983: 1400
+
+# This will censor these values as they are all over 1000. This can be disregarded if these patient's values are correct.
+patient_info$baseline_seizure <- ifelse(patient_info$baseline_seizure > 1000, NA, patient_info$baseline_seizure)
+```
+
+## Outcome variables:
+
+Now let's create some outcome variables:
+
+# Merging Datasets.
+
+Now that everything is cleaned, let's combine the MedHx and the Patient Info:
+
+```{r}
+patient_info$patient_id <- patient_info$`tblPatient::EXT_ID`
+
+Merged_DB <- merge(patient_info, MedHx_Psych, by = "patient_id")
+
+```
+
+# Cleaned Analyses:
+
+### Baseline Seizures
+
+Great, now I want to start looking at some preliminary results. Let's start with baseline seizure count:
+
+```{r}
+
+#Let's add in some of our cleaned variables to asses if there is a linear relationship with our variables:
+
+# Number of Traumas: Not SS
+lm_baseline <- lm(baseline_seizure ~ trauma_events, data = patient_info)
+summary(lm_baseline)
+
+# Any trauma: SS .000755, those with trauma have -8.433 less seizures at baseline on average.
+lm_baseline <- lm(baseline_seizure ~ trauma, data = patient_info)
+summary(lm_baseline)
+
+# Race p < .001: Non white individuals have 2.873 less seizures than white patients on average.
+lm_baseline <- lm(baseline_seizure ~ race, data = patient_info)
+summary(lm_baseline)
+
+#insurance: only those on medicaid are significant (p<.001), they have on average 11.32 seizures per week on average
+lm_baseline <- lm(baseline_seizure ~ insurance, data = patient_info)
+summary(lm_baseline)
+
+#disability: Those who are disables tend to have 9.71 seizures per week.
+lm_baseline <- lm(baseline_seizure ~ disability, data = patient_info)
+summary(lm_baseline)
+
+# Sx to Dx time: Not significant
+lm_baseline <- lm(baseline_seizure ~ Sx_Dx_time, data = patient_info)
+summary(lm_baseline)
+
+# Age: Not significant
+lm_baseline <- lm(baseline_seizure ~ `tblPatient::c_CurrentAge`, data = patient_info)
+summary(lm_baseline)
+
+#PD_any: None
+lm_baseline <- lm(baseline_seizure ~ pd_any, data = Merged_DB)
+summary(lm_baseline)
+
+#Depression: None
+lm_baseline <- lm(baseline_seizure ~ depression_any, data = Merged_DB)
+summary(lm_baseline)
+
+#ptsd_any
+lm_baseline <- lm(baseline_seizure ~ ptsd_any, data = Merged_DB)
+summary(lm_baseline)
+
+# Anxiety
+lm_baseline <- lm(baseline_seizure ~ anxiety_any, data = Merged_DB)
+summary(lm_baseline)
+
+```
+
+### Sx-Dx time
+
+```{r}
+# Medicaid and medicare are significantly related to time to dx. With Medicare patients taking 48 months longer to reach a dx.
+lm_baseline <- lm(Sx_Dx_time ~ insurance, data = patient_info)
+summary(lm_baseline)
+
+# Now with Age: Super significant: for every 1 year increase in age, it take ~2.5 months longer to go from symptom to diagnosis
+lm_baseline <- lm(Sx_Dx_time ~ `tblPatient::c_CurrentAge`, data = patient_info)
+summary(lm_baseline)
+
+# Not Significant
+lm_baseline <- lm(Sx_Dx_time ~ race, data = patient_info)
+summary(lm_baseline)
+
+# Trauma: Not significant
+lm_baseline <- lm(Sx_Dx_time ~ trauma, data = patient_info)
+summary(lm_baseline)
+
+# Trauma #: Significant: On average, for every 1 unit increase in 
+lm_baseline <- lm(Sx_Dx_time ~ trauma_events, data = patient_info)
+summary(lm_baseline)
+
+# PD
+lm_baseline <- lm(Sx_Dx_time ~ pd_any, data = Merged_DB)
+summary(lm_baseline)
+
+# Depression:
+lm_baseline <- lm(Sx_Dx_time ~ depression_any, data = Merged_DB)
+summary(lm_baseline)
+
+# Race:
+lm_baseline <- lm(Sx_Dx_time ~ race, data = Merged_DB)
+summary(lm_baseline)
+
+#Disability - trending towards significance, .0575, no disability leads to 21 less time to dx.
+lm_baseline <- lm(Sx_Dx_time ~ disability, data = Merged_DB)
+summary(lm_baseline)
+
+
 ```
