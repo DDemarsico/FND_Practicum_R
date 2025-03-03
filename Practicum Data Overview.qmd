@@ -883,3 +883,11 @@ patient_info$patient_id <- patient_info$`tblPatient::EXT_ID`
 Merged_DB <- merge(patient_info, MedHx_Psych, by = "patient_id")
 
 ```
+
+## Exporting:
+
+Great, we now have a finished document, let's export this to a csv for use in other projects:
+
+```{r}
+write.csv(Merged_DB,"C:\\Users\\domin\\Downloads\\FND_Cleaned_Data.csv", row.names = FALSE)
+```
