@@ -1,0 +1,19 @@
+---
+title: "Untitled"
+format: html
+editor: visual
+---
+
+# Cleaned Analyses:
+
+### Baseline Seizures
+
+Great, now I want to start looking at some preliminary results. Let's start with baseline seizure count:
+
+```{r}  #Let's add in some of our cleaned variables to asses if there is a linear relationship with our variables:  # Number of Traumas: Not SS lm_baseline <- lm(baseline_seizure ~ trauma_events, data = patient_info) summary(lm_baseline)  # Any trauma: SS .000755, those with trauma have -8.433 less seizures at baseline on average. lm_baseline <- lm(baseline_seizure ~ trauma, data = patient_info) summary(lm_baseline)  # Race p < .001: Non white individuals have 2.873 less seizures than white patients on average. lm_baseline <- lm(baseline_seizure ~ race, data = patient_info) summary(lm_baseline)  #insurance: only those on medicaid are significant (p<.001), they have on average 11.32 seizures per week on average lm_baseline <- lm(baseline_seizure ~ insurance, data = patient_info) summary(lm_baseline)  #disability: Those who are disables tend to have 9.71 seizures per week. lm_baseline <- lm(baseline_seizure ~ disability, data = patient_info) summary(lm_baseline)  # Sx to Dx time: Not significant lm_baseline <- lm(baseline_seizure ~ Sx_Dx_time, data = patient_info) summary(lm_baseline)  # Age: Not significant lm_baseline <- lm(baseline_seizure ~ `tblPatient::c_CurrentAge`, data = patient_info) summary(lm_baseline)  #PD_any: None lm_baseline <- lm(baseline_seizure ~ pd_any, data = Merged_DB) summary(lm_baseline)  #Depression: None lm_baseline <- lm(baseline_seizure ~ depression_any, data = Merged_DB) summary(lm_baseline)  #ptsd_any lm_baseline <- lm(baseline_seizure ~ ptsd_any, data = Merged_DB) summary(lm_baseline)  # Anxiety lm_baseline <- lm(baseline_seizure ~ anxiety_any, data = Merged_DB) summary(lm_baseline)}
+```
+
+### Sx-Dx time
+
+```{r} # Medicaid and medicare are significantly related to time to dx. With Medicare patients taking 48 months longer to reach a dx. lm_baseline <- lm(Sx_Dx_time ~ insurance, data = patient_info) summary(lm_baseline)  # Now with Age: Super significant: for every 1 year increase in age, it take ~2.5 months longer to go from symptom to diagnosis lm_baseline <- lm(Sx_Dx_time ~ `tblPatient::c_CurrentAge`, data = patient_info) summary(lm_baseline)  # Not Significant lm_baseline <- lm(Sx_Dx_time ~ race, data = patient_info) summary(lm_baseline)  # Trauma: Not significant lm_baseline <- lm(Sx_Dx_time ~ trauma, data = patient_info) summary(lm_baseline)  # Trauma #: Significant: On average, for every 1 unit increase in  lm_baseline <- lm(Sx_Dx_time ~ trauma_events, data = patient_info) summary(lm_baseline)  # PD lm_baseline <- lm(Sx_Dx_time ~ pd_any, data = Merged_DB) summary(lm_baseline)  # Depression: lm_baseline <- lm(Sx_Dx_time ~ depression_any, data = Merged_DB) summary(lm_baseline)  # Race: lm_baseline <- lm(Sx_Dx_time ~ race, data = Merged_DB) summary(lm_baseline)  #Disability - trending towards significance, .0575, no disability leads to 21 less time to dx. lm_baseline <- lm(Sx_Dx_time ~ disability, data = Merged_DB) summary(lm_baseline)}
+```
