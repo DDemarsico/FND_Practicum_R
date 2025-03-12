@@ -6,6 +6,66 @@ editor: visual
 
 # Practicum Data Overview:
 
+# Introduction:
+
+This R document has been created to standardize data cleaning for the FTD clinic. It should be used by anyone regardless of coding skill. Because of this, there will be far more documentation on what is being done that what is normal. Additionally, This form should be considered a living document, as new forms and data transformations will be required for different projects. To make this as organized as possible, let's set some rules:
+
+-   **Do not make alterations to the code structure without putting your initials, date of change, and why in a comment. (Comments are created by using a hashtag '\#' and typing in the same line.)**
+
+-   **At baseline, Patient Demographics and Psychiatric Comorbidities are the only two categories that are cleaned. If you want to add an entirely new section, please add it to the bottom of the document and create a new section via making the Text "Header 1". If you are updating an existing section, please reuse as much code as possible, and change only what is needed (i.e. variable names)**
+
+-   **Finally, if you are making large scale changes, please update this information to the FND Clinic's GitHub. We will want to maintain version control so that standardization is maintained. If the FND GitHub is not operational, please save the file in the "Exporting" section as a distinctly named file, as to not overwrite existing files or create confusion.**
+
+## Working in R-Studio/Quarto
+
+For those who are entirely new to R, this will serve as the crash course to this document. R-Studio is what you're working in now. It's the graphical interface that let's you use R as a language. However, we're using R-studio to work within a Quarto project. A Quarto (or qmd) file is effectively a Word Document that you can code in. You can type anything you'd like, or embed pictures in the standard section. Think about R-Studio as Microsoft Word, and Quarto as a Word Document.
+
+Writing is helpful, but we will need to code. You can hit Ctrl-Alt-i (or click Insert-\>Executable Cell -\>R) to create a code chunk:
+
+```{r}
+# Your code chunk will look like this. This is where all code is stored. It should have a grey background and look distinct from the text section.
+
+# The '#' is used to create comments. That's what I'm doing right now! Even though I'm writing, the hashtag tells R that this is not code. This will be where short explanations of what is being done will be written. 
+
+#To write code, make a new space using enter or return:
+print("Hello World")
+
+# This is the simplest amount of code, by hitting the little "play" button at the top, you'll see the text "Hello World" displayed. Hitting the play button will run all code within that chunk, but NOT any other chunks. The little downward arrow will run all code up to (but not including) the chunk you're looking at.
+```
+
+### Altering the code:
+
+The good news for most people reading this document is... you will not have to change much in this document! In fact, it would be preferred that you change as little as possible. What will be required of you will most likely be changing names or variables in the code to fit your specific project. Let's use our Hello World code chunk as an example:
+
+```{r}
+# This is a good example of how code works. We're telling R to print out Hello World with this command. 
+print("Hello World")
+
+# But if we change what is in the quotes, the result will change as well.
+print("Hello R")
+```
+
+This will be the most common change done in this document. If you're not very experienced with coding, this will most likely be the extent of your work in this document. But let's go into a slightly more complicated topic that will allow you to better understand what is being written.
+
+## Variables:
+
+This section is solely to orient you to what variables are and how they are created. By understanding how this works, you'll better understand R-Studio and this document.
+
+So what is a Variable? Effectively, a variable is an "object" that stores a particular type of data. In R, it is effectively the same thing as a column in an Excel file. All values in a variable relate to a specific topic. Let's look at an example:
+
+```{r}
+# If you hit the play button in this chunk, you will see something pop-up in the Environment tab on the top-right of your screen. This is a newly created variable
+numbers <- c(1,2,3,4,5)
+
+# In R, variables are created by: Specifying its name, using '<-' as a command, and then what it will be filled with. In this example, it's filled with a list of numbers ranging from 1 - 5.
+```
+
+This is the basic building block for making variables. However, when two or more variables are combined, you create a dataset (or dataframe). A dataset is the term used for the excel document of raw data that will be used in this document.
+
+```{r}
+
+```
+
 ## Packages
 
 ```{r}
@@ -287,7 +347,7 @@ Note: Please notice how the first value is 'depress' rather than 'depression'. W
 
 Once you have done this, continue this trend by using the subsequent code to filter out anything you want. This can be done by copying the existing code, pasting, and then altering the name of the dataframes called in the code chunk to match your given dataframe name. E.g. alter any point that says MedHx_Psych_Full to {insert_your_data_name_here}. Control-F is your friend for this.
 
-# Data Overview:
+# Patient Information:
 
 ## General Overview:
 
@@ -708,7 +768,7 @@ plot1 <- ggplot(patient_info, aes(x = fct_rev(fct_infreq(insurance)), fill = ins
             geom_bar() +
             scale_fill_brewer(palette = "Set3") +
             theme_minimal() +
-            labs(title = "Insurance Distributions", x = "Insurance Plans", y = "Count") + 
+            labs(title = "Insurance Distributions", x = "Insurance Plans", y = "Number of Patients") + 
             theme(axis.text.x = element_text(angle = 90, hjust = 1))  
 ggplotly(plot1)   # Convert to interactive plotly chart
 ```
@@ -735,7 +795,7 @@ plot2 <- ggplot(patient_info, aes(x = fct_rev(fct_infreq(race)), fill = race)) +
             geom_bar() +
             scale_fill_brewer(palette = "Set1") +
             theme_minimal() +
-            labs(title = "Race Distributions", x = "Race Binary Variable", y = "Count") + 
+            labs(title = "Race Distributions", x = "Race Binary Variable", y = "Number of Patients") + 
             theme(axis.text.x = element_text(angle = 90, hjust = 1))  
 ggplotly(plot2)   # Convert to interactive plotly chart
 ```
@@ -783,7 +843,7 @@ plot4 <- ggplot(patient_info, aes(x = fct_rev(fct_infreq(disability)), fill = di
             geom_bar() +
             scale_fill_brewer(palette = "Set1") +
             theme_minimal() +
-            labs(title = "Race Distributions", x = "Race Binary Variable", y = "Count") + 
+            labs(title = "Disability Status", y = "Number of Patients") + 
             theme(axis.text.x = element_text(angle = 90, hjust = 1))  
 ggplotly(plot4) 
 ```
@@ -796,7 +856,7 @@ I want to look at the time between symptom onset and diagnosis. Currently the va
 unique(patient_info$`tblFND::c_TimeBetweenOnsetAndDiagnosisMonths`)
 ```
 
-Ok, so everything can be an integer. But we'll need to switch a couple of things. First off, it looks like the time in months isn't consistent in this dataset. Some of the values are input as days. It looks like everything greater than \|20,000\| needs to be divided by 30.
+Ok, so everything can be an integer. But we'll need to switch a couple of things. First off, it looks like the time in months isn't consistent in this dataset. Some of the values are input as days. It looks like everything greater than \|20,000\| needs to be divided by 31.
 
 ```{r}
 patient_info$Sx_Dx_time <- as.numeric(patient_info$`tblFND::c_TimeBetweenOnsetAndDiagnosisMonths`)
