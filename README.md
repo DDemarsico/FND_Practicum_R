@@ -10,3 +10,5 @@ A data cleaning SOP/Code
 Small scale analyses 
 
 And one larger analysis for the Capstone project
+
+All work will be done using R-Studio 4.4.2
