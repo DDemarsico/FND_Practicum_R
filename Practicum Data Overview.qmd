@@ -47,7 +47,7 @@ print("Hello R")
 
 This will be the most common change done in this document. If you're not very experienced with coding, this will most likely be the extent of your work in this document. But let's go into a slightly more complicated topic that will allow you to better understand what is being written.
 
-## Variables:
+### Variables:
 
 This section is solely to orient you to what variables are and how they are created. By understanding how this works, you'll better understand R-Studio and this document.
 
@@ -60,13 +60,38 @@ numbers <- c(1,2,3,4,5)
 # In R, variables are created by: Specifying its name, using '<-' as a command, and then what it will be filled with. In this example, it's filled with a list of numbers ranging from 1 - 5.
 ```
 
-This is the basic building block for making variables. However, when two or more variables are combined, you create a dataset (or dataframe). A dataset is the term used for the excel document of raw data that will be used in this document.
+This is the basic building block for making variables. However, when two or more variables are combined, you create a dataset (or dataframe).
+
+### Dataframe/Dataset
+
+A dataset (aka. a dataframe) is the term used for an object that stores variables. It's basically an Excel document that we can name different things to suit our purposes. In most cases, we will be using an excel document of raw data and naming the imported datasets as whatever is useful.
 
 ```{r}
 
+# In this example, data is now a new dataset. In this case, it is a file that has 1 variable as a column: the previously created variable 'numbers'. Much like a variable, making a new dataset uses the arrow '<-' to denote its creation.
+data <- data.frame(numbers)
+
+
 ```
 
+If you are only working in this sheet to clean data, don't worry too much about this portion. The goal of this quick crash-course is to orient you to the basics of R programming. For most individuals, all you will need is copy-paste, and your backspace key.
+
 ## Packages
+
+If this is your first time running this document, delete the hashtags before each line in the code chunk below to download the necessary packages. Please return the hashtags to the front of each line when finished.
+
+```{r}
+#install.packages("gitcreds")     
+#install.packages("readxl")       
+#install.packages("tidyverse")    
+#install.packages("psych")        
+#install.packages("ggplot2")      
+#install.packages("plotly")       
+#install.packages("MVN")          
+#install.packages("stringr")      
+#install.packages("RColorBrewer")
+#install.packages("forcats")      
+```
 
 ```{r}
 library(gitcreds)     # Required for pushing to Git for Version Control
@@ -92,7 +117,8 @@ We'll use the readxl package to import both sheets separately:
 ```{r}
 
 # Define the file path
-file_path <- "C:\\Users\\domin\\Downloads\\nesDataPull_2-14-2025.xlsx"
+#file_path <- "C:\\Users\\domin\\Downloads\\nesDataPull_2-14-2025.xlsx"
+file_path <- "C:\\Users\\domin\\Downloads\\nesDataPull-4_14_2025.xlsx"
 
 # Read the first sheet
 patient_info <- read_excel(file_path, sheet = 1)  # By index
@@ -107,6 +133,7 @@ Let's do a quick overview to check our import was successful
 
 ```{r}
 head(patient_info)
+summary(patient_info)
 
 head(MedHx)
 ```
@@ -358,6 +385,7 @@ I want to get a basic sense of what this dataframe looks like from a demographic
 # Let's look at the overall distribution:
 describe(patient_info)
 
+prop.table(table(patient_info$`tblPatient::c_CurrentAge`))
 prop.table(table(patient_info$`tblPatient::Gender`))
 prop.table(table(patient_info$`tblPatient::Race`))
 prop.table(table(patient_info$c_insuranceAtBaseline))
@@ -933,12 +961,109 @@ which(patient_info$baseline_seizure == 1400)
 patient_info$baseline_seizure <- ifelse(patient_info$baseline_seizure > 1000, NA, patient_info$baseline_seizure)
 ```
 
+## 3 Month
+
+Let's do the same thing for 3-month F/U
+
+```{r}
+#First, let's change baseline amount to numeric.
+patient_info$three_month_seizure <- as.numeric(patient_info$`tblFND::freq3Month`)
+unique(patient_info$three_month_seizure)
+
+# Great, now let's start transforming the variable based on baselinFreq. Let's start with the month variable.
+patient_info$three_month_seizure <- ifelse(patient_info$`tblFND::freq3Month` == "Month", patient_info$three_month_seizure / 4, patient_info$three_month_seizure)
+
+# Now we want to do the same thing, but for the day category. If it's in the day category, make it multiplied by 7.
+patient_info$three_month_seizure <- ifelse(patient_info$`tblFND::freq3Month` == "Day", patient_info$three_month_seizure * 7, patient_info$three_month_seizure)
+
+# Review:
+summary(patient_info$three_month_seizure)
+
+# No unusually high values, but there are significant missing values: 821
+```
+
+## 6 month
+
+Let's do the same thing but for 6-month
+
+```{r}
+#First, let's change baseline amount to numeric.
+patient_info$six_month_seizure <- as.numeric(patient_info$`tblFND::freq6Month`)
+unique(patient_info$six_month_seizure)
+
+# Great, now let's start transforming the variable based on baselinFreq. Let's start with the month variable.
+patient_info$six_month_seizure <- ifelse(patient_info$`tblFND::freq6Month` == "Month", patient_info$six_month_seizure / 4, patient_info$six_month_seizure)
+
+# Now we want to do the same thing, but for the day category. If it's in the day category, make it multiplied by 7.
+patient_info$six_month_seizure <- ifelse(patient_info$`tblFND::freq6Month` == "Day", patient_info$six_month_seizure * 7, patient_info$six_month_seizure)
+
+# Review:
+summary(patient_info$six_month_seizure)
+
+# No unusually high values, but there are significant missing values: 869
+```
+
+## Discharge:
+
+Once again, let's look at the final values at discharge:
+
+```{r}
+#First, let's change baseline amount to numeric.
+patient_info$discharge_seizure <- as.numeric(patient_info$`tblFND::freqFollowUp`)
+unique(patient_info$discharge_seizure)
+
+# Great, now let's start transforming the variable based on baselinFreq. Let's start with the month variable.
+patient_info$discharge_seizure <- ifelse(patient_info$`tblFND::lastApptFreq` == "Month", patient_info$discharge_seizure / 4, patient_info$discharge_seizure)
+
+# Now we want to do the same thing, but for the day category. If it's in the day category, make it multiplied by 7.
+patient_info$discharge_seizure <- ifelse(patient_info$`tblFND::lastApptFreq` == "Day", patient_info$discharge_seizure * 7, patient_info$discharge_seizure)
+
+# Review:
+summary(patient_info$discharge_seizure)
+
+# The max value of 1400 seems odd, let's check the unique values and see what subject this is.
+unique(patient_info$discharge_seizure)
+which(patient_info$discharge_seizure == 1400)
+
+# Ok, so we are finding that there is only one patient with an exceptionally high amount: 983 
+
+# This will censor these values as they are all over 1000. This can be disregarded if these patient's values are correct.
+patient_info$discharge_seizure <- ifelse(patient_info$discharge_seizure > 1000, NA, patient_info$discharge_seizure)
+```
+
+# Attendance:
+
+Mackenzi also mentioned that she wants a variable for patients that have completed greater than 50% of visits for both the 6 and 12 week groups. To accurately asses this rate, let's start by dividing the number of completed events by the number of scheduled events:
+
+```{r}
+#Start by dividing the number of scheduled visits to the number of completed visits:
+
+patient_info$group_complete_pct <- patient_info$`tblPatient::c_totalGroupVisitCompleted` / patient_info$`tblPatient::c_totalGroupVisit`
+
+table(patient_info$group_complete_pct)
+hist(patient_info$group_complete_pct)
+
+# Ok, now I want to find the number of patients that have a completion ratio of greater than 50%
+
+patient_info$group_complete_50 <- ifelse(is.na(patient_info$group_complete_pct), NA, ifelse( patient_info$group_complete_pct > 0.50, 1, 0))
+
+# Let's label the values to make it easier to read
+patient_info$group_complete_50 <- factor(patient_info$group_complete_50, 
+                             levels = c(0,1), 
+                             labels = c("<50%", ">50%"))
+
+prop.table(table(patient_info$group_complete_50))
+table(patient_info$group_complete_50)
+```
+
+The total number of patients that have a greater than 50% attendance rate in either the 6-week, 12-week, or combined visits is 373 (\~60%). The number of patients who have lower than 50% is 248 (\~40%). The total number of patients with data is 621 (\~62%). Our overall population was 1,008. Therefore, we have missing data on 387 (\~38%) patients.
+
 # Merging Datasets.
 
 Now that everything is cleaned, let's combine the MedHx and the Patient Info:
 
 ```{r}
-patient_info$patient_id <- patient_info$`tblPatient::EXT_ID`
+patient_info$patient_id <- patient_info$externalID
 
 Merged_DB <- merge(patient_info, MedHx_Psych, by = "patient_id")
 
@@ -949,5 +1074,5 @@ Merged_DB <- merge(patient_info, MedHx_Psych, by = "patient_id")
 Great, we now have a finished document, let's export this to a csv for use in other projects:
 
 ```{r}
-write.csv(Merged_DB,"C:\\Users\\domin\\Downloads\\FND_Cleaned_Data.csv", row.names = FALSE)
+write.csv(Merged_DB,"C:\\Users\\domin\\Downloads\\Practicum_Cleaned_Data.csv", row.names = FALSE)
 ```
