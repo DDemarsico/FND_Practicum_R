@@ -1,0 +1,15 @@
+---
+title: "Capstone Project"
+format: html
+editor: visual
+---
+
+# Capstone Project:
+
+This will be the analysis for my final capstone project. This project's focus is to both understand why certain individuals are not likely to stay in a group therapy setting at the FND clinic. To do this, we have two sets of analyses:
+
+1.  An interpretable logistic regression model where we can quantify the effect of our covariates on the outcome.
+
+2.  A machine learning logistic regression model, where we can accurately predict which patients are at-risk for non-adherence to the treatment.
+
+The dataset I'll be working with is the cleaned dataset from my Practicum. This should contain almost all of the data I'll need.
