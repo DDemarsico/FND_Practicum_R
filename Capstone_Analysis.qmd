@@ -13,3 +13,354 @@ This will be the analysis for my final capstone project. This project's focus is
 2.  A machine learning logistic regression model, where we can accurately predict which patients are at-risk for non-adherence to the treatment.
 
 The dataset I'll be working with is the cleaned dataset from my Practicum. This should contain almost all of the data I'll need.
+
+# Packages
+
+```{r}
+library(tidyverse)  # For tidyverse programming
+library(ggplot2)    # For Data Visualizations
+library(plotly)     # For interactive visualizations
+library(gt)         # For nice table 1s
+library(gtsummary)  # Used for pretty table 1s
+library(caret)      # Used for Yeo-Johnson transformation
+library(pROC)       # Used for ROC curves
+```
+
+# Data Import
+
+Great, let's import the new dataset to get everything started
+
+```{r}
+
+data <- read.csv("C:\\Users\\domin\\Downloads\\Practicum_Cleaned_Data.csv")
+```
+
+# Data Overview:
+
+Ok, now that we have our dataset, let's get some descriptive statistics out. For both of our aims, our primary outcome measure will be whether or not the subject completed greater than 50% of their group visits. This is measured by the variable group_complete_50. Let's take a peak at the distribution of this variable
+
+```{r}
+
+table(data$group_complete_50)
+
+# 258 patients completed less than 50% of their visits, and 359 subjects completed greater than 50% of their visits. This leads to a total of 617 patients used in our study.
+
+# Now let's s
+
+```
+
+Great, 617 patients will be used in our final analysis. Let's create a new dataframe that reflects these patients.
+
+```{r}
+
+# First, let's set a new dataframe called data2. This will be populated with the 617 subjects who had attendance data. 
+
+data2 <- data[!is.na(data$group_complete_pct), ]
+
+summary (data2$group_complete_50)
+
+summary(data2)
+```
+
+## Table 1
+
+Great, now let's create a nice Table 1 to see the patient characteristics of our population.
+
+```{r}
+tbl1 <- data2 %>%
+  select(group_complete_50, tblPatient..c_CurrentAge, tblPatient..Gender, tblPatient..Gender, race, insurance, Sx_Dx_time, trauma_events, baseline_seizure, tblPatient..c_lastIEmployment, depression_any, anxiety_any, tblPatient..maritalStatus, disability) %>%
+  tbl_summary(by = group_complete_50) %>%
+  modify_header(label ~ "**Variable**") %>%
+  bold_labels() %>%
+  modify_caption("**Table 1.** Baseline Characteristics") %>%
+  as_gt()
+
+tbl1
+```
+
+### Summary
+
+Ok, let's summarize some results: Individuals who complete less than 50% tend to
+
+-   Be a bit younger (36 years vs 39)
+
+-   Be female (81% vs 72%)
+
+-   Be non-white (28% vs 20%)
+
+-   Be on medicaid (45% vs 35%)
+
+-   Not be on Private insurance (36% vs 47%)
+
+-   Unemployed (61% vs 49%)
+
+-   Tend to not have a partner (mixed)
+
+Most of these results are expected. Younger, non-white, medicaid patients would be the quintessential example of an individual who would be affected by socioeconomic factors. However, unemployed individuals not completing the program have more observations than employed individuals.
+
+Additionally, individuals who report not having a SO seem to also have a greater presence in the non adherent group.
+
+However, medical issues, such as depresion, anxiety, baseline seizure amount, and amount of traumatic events seem to have no difference within their population.
+
+# Data Normalization
+
+Now that we know the general distribution of our data, let's begin going through our covariates to assure the data is normal.
+
+## Age:
+
+Let's take a look at the age distribution:
+
+```{r}
+
+# Let's see our mean values
+summary(data2$tblPatient..c_CurrentAge)
+
+# Mean is 39.88 and Median is 37.7. The youngest is 19 and the oldest is 86.9
+
+# Let's start with a histogram to assess normality
+
+hist(data2$tblPatient..c_CurrentAge)
+
+# Relatively right-skewed. 
+```
+
+Ok, since this is slightly skewed, let's llog transform this variable.
+
+```{r}
+
+data2$age_log <- log(data2$tblPatient..c_CurrentAge)
+
+# Now let's check the results:
+
+hist(data2$age_log)
+```
+
+Great, this is relatively normal.
+
+## Gender:
+
+Ok, gender as a variable hasn't been cleaned yet. Let's start by changing the character variable into an categorical variable:
+
+```{r}
+
+data2$gender <- factor(data2$tblPatient..Gender)
+
+summary(data2$gender)
+
+
+```
+
+## Race:
+
+Race is still a character, let's change it to a factor. Before making it a character, non-white patients were grouped together into a "Other" category. This is utterly reductive, but the clinic would not have a large enough cohort to study non-white patients without this.
+
+```{r}
+
+data2$race <- factor(data2$race)
+
+summary(data2$race)
+```
+
+A bit skewed towards white patients, but nothing else to be done.
+
+## Insurance:
+
+Again, insurance is already cleaned, but needs to be transformed into a factor.
+
+```{r}
+
+data2$insurance <- factor(data2$insurance)
+
+plot1 <- ggplot(data2, aes(x = fct_rev(fct_infreq(insurance)), fill = insurance)) +
+            geom_bar() +
+            scale_fill_brewer(palette = "Set3") +
+            theme_minimal() +
+            labs(title = "Insurance Distributions", x = "Insurance Plans", y = "Number of Patients") + 
+            theme(axis.text.x = element_text(angle = 90, hjust = 1))  
+ggplotly(plot1)   # Convert to interactive plotly chart
+```
+
+## Sx_Dx_Time
+
+This variable is measured as the amount of months between symptom onset and the patient receiving a diagnosis. Let's take a look at the variable:
+
+```{r}
+
+summary(data2$Sx_Dx_time)
+
+# 82.14 months on average. Let's check a plot for rough normality
+
+hist(data2$Sx_Dx_time, breaks = 30, main = "Histogram", xlab = "Sx_Dx_time")
+
+# Wow, incredibly right skewed. Let's do another log transform
+data2$Sx_Dx_Log <- log(data2$Sx_Dx_time)
+
+# Now let's look again
+hist(data2$Sx_Dx_Log, breaks = 50, main = "Histogram", xlab = "Sx_Dx_Log")
+
+
+```
+
+Still not working. Since we have patients that have 0 months, we'll need to try a Yeo Johnson Transformation to achieve normality.
+
+```{r}
+
+# Pre process the data using the YeoJohnson transformation
+preproc <- preProcess(data2["Sx_Dx_time"], method = "YeoJohnson")
+# Then save the predicted values into another value
+data2$SxDx_yj <- predict(preproc, data2["Sx_Dx_time"])[[1]]
+
+# Ok, now let's look at the data
+hist(data2$SxDx_yj, 
+     main = "Histogram of Yeo-Johnson Transformed Variable", 
+     xlab = "Transformed Values", 
+     col = "lightblue", 
+     breaks = 30)
+```
+
+## Traumatic Events:
+
+Event \# is a continuous variable, so let's check the values:
+
+```{r}
+
+hist(data2$trauma_events)
+
+# a bit right skewed, but not horrible.
+```
+
+## Employment:
+
+This is also a character that needs to be changed to a factor:
+
+```{r}
+# Set this as a factor
+data2$employment <- factor(data2$tblPatient..c_lastIEmployment)
+# Now let's review
+summary(data2$employment)
+
+# Now let's make this a new factor that has two levels: Job or No-Job
+
+# Create new binary factor based on first level
+data2$employment <- ifelse(data2$employment == levels(data2$employment)[1],
+                                  "Employed", "Unemployed")
+
+# Convert to factor
+data2$employment <- factor(data2$employment, levels = c("Employed", "Unemployed"))
+
+# And review it:
+summary(data2$employment)
+```
+
+## Disability
+
+This is also a character, but it needs to be a factor
+
+# Aim 1:
+
+## Overview:
+
+The primary goal of Aim 1 is to fit a logistic regression model to better understand which covariates contribute to any specific patient's risk for non-adherence to the group therapy modality.
+
+## Saturated Model:
+
+To begin, I want to start with a saturated model, but only using the variable that
+
+# Aim 2:
+
+Let's try to train the logistic regression model first.
+
+Before running, let's look for NAs. This will cause problems for us in the model training section.
+
+```{r}
+
+
+#set Group_Complete_50 as a factor:
+data2$group_complete_50 <- factor(data2$group_complete_50)
+
+# And set the names to be better suited to the model:
+levels(data2$group_complete_50) <- c("HighRisk", "LowRisk") 
+
+
+# Ok we have a few missing points, let's create a model training dataset to see if we can run the model first.
+
+data2_model <- na.omit(data2[, c("group_complete_50", "age_log", "insurance", "gender", "race", "employment", "baseline_seizure", "anxiety_any", "depression_any")])
+
+# And now let's set our reference to Low-Risk, as we're only interested in identifying patients that are high risk.
+data2_model$group_complete_50 <- relevel(data2_model$group_complete_50, ref = "LowRisk")
+```
+
+## Model training
+
+```{r}
+# Define the control for cross-validation
+#train_control <- trainControl(method = "cv", number = 5)  # 5-fold cross-validation
+
+train_control <- trainControl(method = "cv", number = 10, classProbs = TRUE, summaryFunction = twoClassSummary, savePredictions = "final")
+
+
+# Train the logistic regression model
+model_simple1 <- train(
+  group_complete_50 ~ age_log + insurance + gender + race + employment + baseline_seizure + anxiety_any + depression_any, 
+  data = data2_model,
+  method = "glm",
+  family = "binomial",
+  trControl = train_control
+)
+
+# View results
+print(model_simple1)
+summary(model_simple1$finalModel)
+
+#the data isn't significant, but let's exponentiate the coefficients to get ORs
+exp(coef(model_simple1$finalModel))
+```
+
+The total accuracy may be a bit low, but the sensitivity is quite high. This actually may be quite helpful for the sake of the clinic. In this case, High-Risk patients are considered the positive cases. This model was able to correctly identify High-Risk patients approximately \~80% of the time. However, it was only able to correctly indentify low-risk patients 23% of the time.
+
+In an epidemiological sense, this effectively states that we have a quite low rate of false negatives, but quite a lot of false positives. For the purpose of Aim 2, this is actually quite good. The model may inflate the number of patients by putting truly low-risk patients in the high-risk group, but very rarely misses people who truly are High-risk. For the purpose of providing additional resources, this is highly beneficial. Patients will not be turned away due to this model.
+
+```{r}
+
+# Extract predicted probabilities and observed outcomes
+pred <- model_simple1$pred
+
+# Check the levels to ensure correct positive class
+levels(pred$obs)  # positive class = second level
+
+# Create ROC curve object
+roc_obj <- roc(response = pred$obs, predictor = pred$HighRisk)
+
+# Plot ROC
+plot(roc_obj, col = "blue", main = "ROC Curve")
+
+```
+
+## Recursive Feature Elimination:
+
+Now that we have a model that is *AT LEAST* sensitive, let's try to make this model more accurate overall. To do this, I plan to retrain the model with an iteratively fewer number of covariates. This way, we aim to reduce the overfitting and signal to noise ratio.
+
+```{r}
+
+# Define predictor names
+features <- c("age_log", "insurance", "gender", "race", "employment", "baseline_seizure", "anxiety_any", "depression_any")
+
+# Define control parameters for RFE
+rfe_control <- rfeControl(functions = rfFuncs, # Using Random Forest for feature importance
+                         method = "cv",        # Cross-validation
+                         number = 10)           # Number of folds
+
+# Run RFE
+rfe_results <- rfe(x = data2_model[, features],  # Predictor variables
+                  y = data2_model[, "group_complete_50"],    # Outcome variable
+                  sizes = c(1:8),       # Number of features to try
+                  rfeControl = rfe_control)
+
+# Get the selected features
+selected_features <- predictors(rfe_results)
+
+# Print results
+print(rfe_results)
+print(selected_features)
+
+```
