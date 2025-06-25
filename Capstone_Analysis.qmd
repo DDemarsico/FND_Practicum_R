@@ -397,6 +397,7 @@ rfe_control <- rfeControl(functions = rfFuncs, # Using Random Forest for feature
                          method = "cv",        # Cross-validation
                          number = 10)           # Number of folds
 
+set.seed(123)
 # Run RFE
 rfe_results <- rfe(x = data2_model[, features],  # Predictor variables
                   y = data2_model[, "group_complete_50"],    # Outcome variable
@@ -412,11 +413,75 @@ print(selected_features)
 
 ```
 
-When viewing the effects of the model, the top 5 most important variables are Sx_Dx_time, baseline seizure count, employment, insurance, and disability.
+When viewing the effects of the model, the top 5 most important variables are Sx_Dx_time, baseline seizure count, employment, insurance, and gender.
 
-However, the model with the best accuracy (.5974), was a model with 10 variables: Sx_Dx_time, baseline seizure, employment, insurance, disability, race, gender, anxiety_any, partner, age_log.
+However, this model had the best accuracy (.5879).
 
-# Lasso 
+Let's run this model one more time to see the sensitivity:
+
+```{r}
+
+set.seed(123)
+# Train the logistic regression model
+model_simple2 <- train(
+  group_complete_50 ~ insurance + gender + employment + baseline_seizure + Sx_Dx_time, 
+  data = data2_model,
+  method = "glm",
+  family = "binomial",
+  trControl = train_control
+)
+
+model_simple2
+```
+
+ROC = .5499, Sensitivity = .81, Specificity .25
+
+Let's visualize this:
+
+```{r}
+
+# Extract predicted probabilities and observed outcomes
+pred <- model_simple2$pred
+
+# Check the levels to ensure correct positive class
+levels(pred$obs)  # positive class = second level
+
+# Create ROC curve object
+roc_obj <- roc(response = pred$obs, predictor = pred$HighRisk)
+
+# Plot ROC
+plot(roc_obj, col = "blue", main = "ROC Curve")
+```
+
+Now I want to look at Sensitivity vs Specificity to find possible thresholds:
+
+```{r}
+
+# Extract sensitivity and specificity across thresholds
+roc_df <- coords(
+  roc_obj,
+  x = seq(0, 1, by = 0.01),
+  input = "threshold",
+  ret = c("threshold", "sensitivity", "specificity"),
+  transpose = FALSE
+)
+
+
+# Plot it
+ggplot(roc_df, aes(x = threshold)) +
+  geom_line(aes(y = sensitivity, color = "Specificity"), linewidth = 1.2) +
+  geom_line(aes(y = specificity, color = "Sensitivity"), linewidth = 1.2) +
+  geom_vline(xintercept = 0.5, linetype = "dashed", color = "gray40") +
+  scale_color_manual(values = c("Sensitivity" = "blue", "Specificity" = "red")) +
+  labs(
+    y = "Rate",
+    x = "Threshold",
+    title = "Sensitivity and Specificity vs. Threshold (Logistic Regression)"
+  ) +
+  theme_minimal()
+```
+
+# Lasso
 
 Now that we have our final variables, I want to compare the results with Lasso regression. Let's move onto seeing which are actually needed and which are redundant. Lasso will move certain covariates to 0 if others are more predictive.
 
@@ -452,8 +517,8 @@ Now we can run cross validated Lasso:
 
 set.seed(123)
 
-cv_lasso <- cv.glmnet(x, y, alpha = 1, family = "binomial", type.measure = "class")  # for accuracy
-# or use type.measure = "auc" for AUC optimization
+cv_lasso <- cv.glmnet(x, y, alpha = 1, family = "binomial", type.measure = "auc")  # for auc
+# or use type.measure = "class" for Accuracy optimization
 
 # Predict probabilities
 pred_probs <- predict(cv_lasso, newx = x, s = "lambda.min", type = "response")
@@ -468,15 +533,27 @@ mean(pred_class == y)
 roc_obj <- roc(y, as.numeric(pred_probs))  # Ensure pred_probs is numeric
 auc(roc_obj)
 
+
+# Sensitivity and specificity at threshold 0.5
+coords(roc_obj, x = 0.5, input = "threshold", ret = c("sensitivity", "specificity"))
+
 # Plot ROC
-plot(roc_obj, col = "blue", main = "ROC Curve")
+plot(
+  roc_obj,
+  col = "blue",
+  main = "ROC Curve",
+  xaxs = "i",
+  yaxs = "i"
+)
 ```
+
+Now let's look at sensitivty vs specificity
 
 Pretty solid, but now i want to run this model using Random Forest first.
 
 # Random Forest:
 
-I ran this model first with logistic regression, but this was hitting and accuracy limit of approximately 60%. This however, did have a high sensitivity, but was definitely lacking in terms of overall prediction. I'd like to see if Random Forest can provide a higher predictive value if we sacrifice interpretability. We'll start with rerunning RFE for Random Forest.
+I ran this model first with logistic regression then with lasso, but this was hitting an accuracy limit of approximately 60%. This however, did have a high sensitivity, but was definitely lacking in terms of overall prediction. I'd like to see if Random Forest can provide a higher predictive value if we sacrifice interpretability. We'll start with rerunning RFE for Random Forest.
 
 ```{r}
 
@@ -494,7 +571,7 @@ ctrl <- rfeControl(functions = rfFuncs,
 
 rfe_rf <- rfe(x = data2_model[, predictors],   # predictors is vector of var names
               y = data2_model$group_complete_50,
-              sizes = c(5, 10, 15),   # try subsets of variables
+              sizes = c(1,2,3,4,5,6,7,8,9,10),   # try subsets of variables
               rfeControl = ctrl)
 
 
@@ -502,14 +579,14 @@ rfe_rf <- rfe(x = data2_model[, predictors],   # predictors is vector of var nam
 rfe_rf$optVariables 
 ```
 
-RFE tailored for Random Forest suggests only 5 variables: Baseline_seizure, Sx_Dx_time, employment, insurance, and Ethnicity.
+RFE tailored for Random Forest suggests only 8 variables: Baseline_seizure, Sx_Dx_time, employment, gender, disability, insurance, Ethnicity, race.
 
-Great, now using these 5 variables, let's run the random forest model.
+Great, now using these 8 variables, let's run the random forest model.
 
 ```{r}
 
 # Set the selected variables in their own list
-selected_vars <- c("baseline_seizure", "Sx_Dx_time", "employment", "insurance", "tblPatient..Ethnicity")
+selected_vars <- c("baseline_seizure", "Sx_Dx_time", "employment", "gender", "insurance", "disability", "race", "tblPatient..Ethnicity")
 
 # create a new dataset with the cleaned values
 rf_data <- data2_model[, c("group_complete_50", selected_vars)]
@@ -530,21 +607,26 @@ Now run the model:
 
 # Use 10-fold CV and evaluate on AUC
 ctrl <- trainControl(method = "cv",
-                     number = 5,
+                     number = 10,
                      classProbs = TRUE,
-                     summaryFunction = twoClassSummary)
+                     summaryFunction = twoClassSummary,
+                     savePredictions = "final")
+
+set.seed(123)
+
 
 rf_model <- train(group_complete_50 ~ .,
                   data = rf_data,
                   method = "rf",
                   trControl = ctrl,
                   metric = "ROC",      # Optimize for AUC
-                  tuneLength = 5)      # Auto-tunes mtry
+                  tuneLength = 5,
+                  ntree = 1000)      # Auto-tunes mtry
 
 print(rf_model)
 ```
 
-Excellent, the random forest was
+Excellent, the random forest showed try 5 had a ROC of .63 with a sensitivty of .70 and specificty of .48. However, this was done at a threshold of .5. This may be too high of a threshold. Let's visualize this and move forward.
 
 ## Plotting:
 
@@ -564,7 +646,7 @@ Ok, but for our purposes, sensitivity to High-risk patients is more important. L
 
 # Your true outcomes and predicted probabilities
 y_true <- rf_data$group_complete_50
-pred_probs <- predict(rf_model, newdata = rf_data, type = "prob")[, "HighRisk"]
+#pred_probs <- predict(rf_model, newdata = rf_data, type = "prob")[, "HighRisk"]
 
 # Create ROC object
 roc_obj <- roc(y_true, pred_probs)
@@ -580,8 +662,8 @@ plot(thresholds, sensitivities, type = "l", col = "blue", ylim = c(0,1),
 lines(thresholds, specificities, col = "red")
 legend("right", legend = c("Sensitivity", "Specificity"), col = c("blue", "red"), lty = 1)
 
-# Choose the threshold. .3 seems appropriate.
-chosen_threshold <- 0.3
+# Choose the threshold. .4 seems appropriate.
+chosen_threshold <- 0.5
 
 # Add vertical line
 abline(v = chosen_threshold, col = "darkgreen", lwd = 2, lty = 2)
@@ -597,3 +679,131 @@ text(x = chosen_threshold, y = specificities[idx] - 0.05,
 ```
 
 Ok, great! When looking at a threshold of 0.3, We receive a sensitivity of .85 and a specificity of 0.61. This values went up as our threshold for determining who was at-risk changed. Looking at this graph, if we moved the dotted line to .5, our sensitivity goes up, but our specificity tanks. By being more liberal with who is considered High-Risk, we can increase the odds of allowing certain patients receive additional resources, while simultaneously factoring out the patients that are truly low risk. By lowering the bar, we choose to include edge cases, while having a good shot of making sure that the lowest risk patients aren't entered in, saving resources.
+
+# Test:
+
+```{r}
+
+preds <- rf_model$pred %>%
+  filter(mtry == rf_model$bestTune$mtry)  # only keep best tuning param
+
+head(preds)
+
+
+```
+
+Step 3: Use `pROC` to calculate and plot Sensitivity & Specificity across thresholds
+
+```{r}
+
+roc_obj <- roc(preds$obs, preds$HighRisk, levels = rev(levels(preds$obs)))
+
+thresholds <- seq(0, 1, by = 0.01)
+
+roc_df <- coords(
+  roc_obj,
+  x = thresholds,
+  input = "threshold",
+  ret = c("threshold", "sensitivity", "specificity"),
+  transpose = FALSE  # This keeps each row = one threshold
+)
+```
+
+Plot Sensitivity & Specificity vs Threshold
+
+```{r}
+
+# Define your threshold of interest
+chosen_threshold <- 0.3
+
+# Find the row closest to the chosen threshold
+annot_row <- roc_df[which.min(abs(roc_df$threshold - chosen_threshold)), ]
+
+ggplot(roc_df, aes(x = threshold)) +
+  geom_line(aes(y = sensitivity, color = "Sensitivity"), linewidth = 1.2) +
+  geom_line(aes(y = specificity, color = "Specificity"), linewidth = 1.2) +
+  
+  # Vertical dashed line at chosen threshold
+  geom_vline(xintercept = chosen_threshold, linetype = "dashed", color = "gray40") +
+  
+  # Annotate Sensitivity at chosen threshold
+  geom_point(data = annot_row, aes(x = threshold, y = sensitivity), color = "blue", size = 3) +
+  geom_text(
+    data = annot_row,
+    aes(
+      x = threshold,
+      y = sensitivity,
+      label = paste0("Sens = ", round(sensitivity, 2))
+    ),
+    hjust = -0.1, vjust = -1, size = 3.5, color = "blue"
+  ) +
+  
+  # Annotate Specificity at chosen threshold
+  geom_point(data = annot_row, aes(x = threshold, y = specificity), color = "red", size = 3) +
+  geom_text(
+    data = annot_row,
+    aes(
+      x = threshold,
+      y = specificity,
+      label = paste0("Spec = ", round(specificity, 2))
+    ),
+    hjust = -0.1, vjust = 1.5, size = 3.5, color = "red"
+  ) +
+  
+  scale_color_manual(values = c("Sensitivity" = "blue", "Specificity" = "red")) +
+  labs(
+    y = "Rate",
+    x = "Threshold",
+    title = "Sensitivity and Specificity vs. Threshold"
+  ) +
+  theme_minimal()
+
+```
+
+# XGBoost:
+
+I want to check if a method utilizing gradient boosting would be helpful for model accuracy. Let's run this again and see what we can get:
+
+First let's make the dataset
+
+```{r}
+# Set the selected variables in their own list
+selected_vars <- c("baseline_seizure", "Sx_Dx_time", "employment", "gender", "insurance", "disability", "race", "tblPatient..Ethnicity")
+
+# create a new dataset with the cleaned values
+xg_data <- data2_model[, c("group_complete_50", selected_vars)]
+
+# Remove rows with missing values if they are present
+xg_data <- na.omit(xg_data)
+
+# And set LowRisk as the reference:
+xg_data$group_complete_50 <- relevel(xg_data$group_complete_50, ref = "LowRisk")
+
+# And finally, check the distribution of values in the factor:
+table(xg_data$group_complete_50)
+```
+
+```{r}
+
+ctrl <- trainControl(
+  method = "cv",
+  number = 5,
+  classProbs = TRUE,
+  summaryFunction = twoClassSummary,
+  savePredictions = "final"
+)
+
+# Train GBM model (gradient boosting machine)
+set.seed(123)
+gbm_model <- train(
+  group_complete_50 ~ ., 
+  data = xg_data,
+  method = "gbm",
+  metric = "ROC",
+  trControl = ctrl,
+  verbose = FALSE,
+  tuneLength = 5
+)
+
+print(gbm_model)
+```
