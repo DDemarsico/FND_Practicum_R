@@ -24,6 +24,7 @@ library(gt)         # For nice table 1s
 library(gtsummary)  # Used for pretty table 1s
 library(caret)      # Used for Yeo-Johnson transformation
 library(pROC)       # Used for ROC curves
+library(glmnet)    # For Lasso regression
 ```
 
 # Data Import
@@ -254,7 +255,49 @@ summary(data2$employment)
 
 ## Disability
 
-This is also a character, but it needs to be a factor
+This is also a character, but it needs to be a factor:
+
+```{r}
+
+# Set this as a factor
+data2$disability <- factor(data2$disability, levels = c("No Disability", "Disability"))
+                           
+# Now let's review
+table(data2$disability)
+table(data$disability)
+
+```
+
+## Relationship Status:
+
+Our current variable for relationship status is a string with multiple values. I want to set this to be a factor that has 3 levels. For my purposes, I want it to be Partner, No Partner, or Unknown.
+
+```{r}
+
+# Let's start by looking at our original variable:
+table(data2$tblPatient..maritalStatus)
+
+# For the sake of our new factor I want Engaged, Married, Significant Other to be put into Partner. I want Other and Unknown to be in Unknown, and everything else to be in No Partner.
+
+data2 <- data2 %>%
+  mutate(
+    partner = case_when(
+      tblPatient..maritalStatus %in% c("Engaged", "Married", "Significant Other") ~ "Partner",
+      tblPatient..maritalStatus == "Unknown" ~ "Unknown",
+      tblPatient..maritalStatus == "Other" ~ "Unknown",
+      !is.na(tblPatient..maritalStatus) ~ "No Partner",
+      TRUE ~ NA_character_
+    ),
+    partner = factor(partner, levels = c("Partner", "No Partner", "Unknown"))
+  )
+
+# Let's review the the factor to check our values:
+table(data2$partner)
+```
+
+# Exploratory Variables
+
+I also want to clean some other variables. These may not make too much sense in a model focused on Parsimony. However, they can be useful in a machine learning context where we can fit up to 50-60 variables at max. However, a model with 10 or less would probably be best. This dataset isn't big
 
 # Aim 1:
 
@@ -268,12 +311,18 @@ To begin, I want to start with a saturated model, but only using the variable th
 
 # Aim 2:
 
+## Dataframe creation
+
 Let's try to train the logistic regression model first.
 
 Before running, let's look for NAs. This will cause problems for us in the model training section.
 
 ```{r}
 
+# Let's do one check of our class distribution again:
+summary(data2$group_complete_50)
+prop.table(table(data2$group_complete_50))
+# Good, 258 High risk, and 359 low risk. 41.8% to 58.2%. Not too different.No need to rebalance the classes.
 
 #set Group_Complete_50 as a factor:
 data2$group_complete_50 <- factor(data2$group_complete_50)
@@ -284,7 +333,7 @@ levels(data2$group_complete_50) <- c("HighRisk", "LowRisk")
 
 # Ok we have a few missing points, let's create a model training dataset to see if we can run the model first.
 
-data2_model <- na.omit(data2[, c("group_complete_50", "age_log", "insurance", "gender", "race", "employment", "baseline_seizure", "anxiety_any", "depression_any")])
+data2_model <- na.omit(data2[, c("group_complete_50", "age_log", "insurance", "gender", "race", "employment", "baseline_seizure", "anxiety_any", "depression_any", "disability", "partner", "Sx_Dx_time", "tblPatient..Ethnicity")])
 
 # And now let's set our reference to Low-Risk, as we're only interested in identifying patients that are high risk.
 data2_model$group_complete_50 <- relevel(data2_model$group_complete_50, ref = "LowRisk")
@@ -294,14 +343,12 @@ data2_model$group_complete_50 <- relevel(data2_model$group_complete_50, ref = "L
 
 ```{r}
 # Define the control for cross-validation
-#train_control <- trainControl(method = "cv", number = 5)  # 5-fold cross-validation
-
 train_control <- trainControl(method = "cv", number = 10, classProbs = TRUE, summaryFunction = twoClassSummary, savePredictions = "final")
 
 
 # Train the logistic regression model
 model_simple1 <- train(
-  group_complete_50 ~ age_log + insurance + gender + race + employment + baseline_seizure + anxiety_any + depression_any, 
+  group_complete_50 ~ age_log + insurance + gender + race + employment + baseline_seizure + anxiety_any + depression_any + disability + partner + Sx_Dx_time, 
   data = data2_model,
   method = "glm",
   family = "binomial",
@@ -343,7 +390,7 @@ Now that we have a model that is *AT LEAST* sensitive, let's try to make this mo
 ```{r}
 
 # Define predictor names
-features <- c("age_log", "insurance", "gender", "race", "employment", "baseline_seizure", "anxiety_any", "depression_any")
+features <- c("age_log", "insurance", "gender", "race", "employment", "baseline_seizure", "anxiety_any", "depression_any", "disability", "partner", "Sx_Dx_time")
 
 # Define control parameters for RFE
 rfe_control <- rfeControl(functions = rfFuncs, # Using Random Forest for feature importance
@@ -353,7 +400,7 @@ rfe_control <- rfeControl(functions = rfFuncs, # Using Random Forest for feature
 # Run RFE
 rfe_results <- rfe(x = data2_model[, features],  # Predictor variables
                   y = data2_model[, "group_complete_50"],    # Outcome variable
-                  sizes = c(1:8),       # Number of features to try
+                  sizes = c(1:11),       # Number of features to try
                   rfeControl = rfe_control)
 
 # Get the selected features
@@ -364,3 +411,189 @@ print(rfe_results)
 print(selected_features)
 
 ```
+
+When viewing the effects of the model, the top 5 most important variables are Sx_Dx_time, baseline seizure count, employment, insurance, and disability.
+
+However, the model with the best accuracy (.5974), was a model with 10 variables: Sx_Dx_time, baseline seizure, employment, insurance, disability, race, gender, anxiety_any, partner, age_log.
+
+# Lasso 
+
+Now that we have our final variables, I want to compare the results with Lasso regression. Let's move onto seeing which are actually needed and which are redundant. Lasso will move certain covariates to 0 if others are more predictive.
+
+```{r}
+
+
+# Select the 10 RFE-selected variables
+rfe_vars <- c("age_log", "insurance", "gender", "race", "employment", "baseline_seizure", "anxiety_any", "disability", "partner", "Sx_Dx_time") 
+
+# 2. Subset the data — ensure all selected variables exist and have no missing
+# Subset and remove rows with missing values
+selected_data <- na.omit(data2_model[, c("group_complete_50", rfe_vars)])
+
+# Convert factor/character to numeric 0/1
+selected_data$group_complete_50 <- ifelse(selected_data$group_complete_50 == "LowRisk", 1, 0)
+
+
+# 3. Remove missing rows (if any)
+selected_data <- na.omit(selected_data)
+
+
+# 4. Create model matrix (excluding intercept)
+x <- model.matrix(group_complete_50 ~ ., data = selected_data)[, -1]
+y <- selected_data$group_complete_50
+
+
+
+```
+
+Now we can run cross validated Lasso:
+
+```{r}
+
+set.seed(123)
+
+cv_lasso <- cv.glmnet(x, y, alpha = 1, family = "binomial", type.measure = "class")  # for accuracy
+# or use type.measure = "auc" for AUC optimization
+
+# Predict probabilities
+pred_probs <- predict(cv_lasso, newx = x, s = "lambda.min", type = "response")
+
+# Predict classes
+pred_class <- ifelse(pred_probs > 0.5, 1, 0)
+
+# Accuracy
+mean(pred_class == y)
+
+# AUC
+roc_obj <- roc(y, as.numeric(pred_probs))  # Ensure pred_probs is numeric
+auc(roc_obj)
+
+# Plot ROC
+plot(roc_obj, col = "blue", main = "ROC Curve")
+```
+
+Pretty solid, but now i want to run this model using Random Forest first.
+
+# Random Forest:
+
+I ran this model first with logistic regression, but this was hitting and accuracy limit of approximately 60%. This however, did have a high sensitivity, but was definitely lacking in terms of overall prediction. I'd like to see if Random Forest can provide a higher predictive value if we sacrifice interpretability. We'll start with rerunning RFE for Random Forest.
+
+```{r}
+
+# First we'll set our variable names to be used.
+predictors <- c("age_log", "insurance", "gender", "race", "employment", "baseline_seizure", "anxiety_any", "depression_any", "disability", "partner", "Sx_Dx_time", "tblPatient..Ethnicity")
+
+
+set.seed(123)
+
+
+
+ctrl <- rfeControl(functions = rfFuncs,
+                   method = "cv",
+                   number = 10)
+
+rfe_rf <- rfe(x = data2_model[, predictors],   # predictors is vector of var names
+              y = data2_model$group_complete_50,
+              sizes = c(5, 10, 15),   # try subsets of variables
+              rfeControl = ctrl)
+
+
+# Shows best variable set for random forest
+rfe_rf$optVariables 
+```
+
+RFE tailored for Random Forest suggests only 5 variables: Baseline_seizure, Sx_Dx_time, employment, insurance, and Ethnicity.
+
+Great, now using these 5 variables, let's run the random forest model.
+
+```{r}
+
+# Set the selected variables in their own list
+selected_vars <- c("baseline_seizure", "Sx_Dx_time", "employment", "insurance", "tblPatient..Ethnicity")
+
+# create a new dataset with the cleaned values
+rf_data <- data2_model[, c("group_complete_50", selected_vars)]
+
+# Remove rows with missing values if they are present
+rf_data <- na.omit(rf_data)
+
+# And set LowRisk as the reference:
+rf_data$group_complete_50 <- relevel(rf_data$group_complete_50, ref = "LowRisk")
+
+# And finally, check the distribution of values in the factor:
+table(rf_data$group_complete_50)
+```
+
+Now run the model:
+
+```{r}
+
+# Use 10-fold CV and evaluate on AUC
+ctrl <- trainControl(method = "cv",
+                     number = 5,
+                     classProbs = TRUE,
+                     summaryFunction = twoClassSummary)
+
+rf_model <- train(group_complete_50 ~ .,
+                  data = rf_data,
+                  method = "rf",
+                  trControl = ctrl,
+                  metric = "ROC",      # Optimize for AUC
+                  tuneLength = 5)      # Auto-tunes mtry
+
+print(rf_model)
+```
+
+Excellent, the random forest was
+
+## Plotting:
+
+First, let's plot the best threshold when comparing sensitivity and specificity.
+
+```{r}
+
+# First 
+roc_obj <- roc(rf_data$group_complete_50, pred_probs)
+
+plot(roc_obj, print.thres = "best", print.thres.best.method = "closest.topleft")
+```
+
+Ok, but for our purposes, sensitivity to High-risk patients is more important. Let's look at some thresholds for this model instead.
+
+```{r}
+
+# Your true outcomes and predicted probabilities
+y_true <- rf_data$group_complete_50
+pred_probs <- predict(rf_model, newdata = rf_data, type = "prob")[, "HighRisk"]
+
+# Create ROC object
+roc_obj <- roc(y_true, pred_probs)
+
+# Extract thresholds, sensitivities, and specificities
+thresholds <- roc_obj$thresholds
+sensitivities <- roc_obj$sensitivities
+specificities <- roc_obj$specificities
+
+# Plot sensitivity and specificity vs thresholds
+plot(thresholds, sensitivities, type = "l", col = "blue", ylim = c(0,1),
+     xlab = "Threshold", ylab = "Rate", main = "Sensitivity and Specificity vs Threshold")
+lines(thresholds, specificities, col = "red")
+legend("right", legend = c("Sensitivity", "Specificity"), col = c("blue", "red"), lty = 1)
+
+# Choose the threshold. .3 seems appropriate.
+chosen_threshold <- 0.3
+
+# Add vertical line
+abline(v = chosen_threshold, col = "darkgreen", lwd = 2, lty = 2)
+
+# Find nearest index to chosen_threshold
+idx <- which.min(abs(thresholds - chosen_threshold))
+
+# Add text labels for sensitivity and specificity at that threshold
+text(x = chosen_threshold, y = sensitivities[idx] + 0.05, 
+     labels = paste0("Sens: ", round(sensitivities[idx], 2)), col = "blue", pos = 4)
+text(x = chosen_threshold, y = specificities[idx] - 0.05, 
+     labels = paste0("Spec: ", round(specificities[idx], 2)), col = "red", pos = 4)
+```
+
+Ok, great! When looking at a threshold of 0.3, We receive a sensitivity of .85 and a specificity of 0.61. This values went up as our threshold for determining who was at-risk changed. Looking at this graph, if we moved the dotted line to .5, our sensitivity goes up, but our specificity tanks. By being more liberal with who is considered High-Risk, we can increase the odds of allowing certain patients receive additional resources, while simultaneously factoring out the patients that are truly low risk. By lowering the bar, we choose to include edge cases, while having a good shot of making sure that the lowest risk patients aren't entered in, saving resources.
