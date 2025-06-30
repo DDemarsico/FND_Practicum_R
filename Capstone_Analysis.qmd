@@ -295,6 +295,36 @@ data2 <- data2 %>%
 table(data2$partner)
 ```
 
+## NES vs ES
+
+And I also want to create a separate factor for patients that also have Epileptic seizures:
+
+```{r}
+
+# Let's check our distribution:
+table(data2$tblPatient..nesES)
+
+#463 no, 25 Unknown, 128 Yes
+
+# Great, now let's create this to be a factor with 3 levels:
+data2 <- data2 %>%
+  mutate(
+    NES = case_when(
+      tblPatient..nesES == "No" ~ "NES",
+      tblPatient..nesES == "Unknown" ~ "Unknown",
+      tblPatient..nesES == "Yes" ~ "ES",
+      TRUE ~ NA_character_
+    ),
+    NES = factor(NES, levels = c("NES", "Unknown", "ES"))
+  )
+
+# Now let's check
+table(data2$NES)
+
+# Now let's relevel this to have NES be the reference level
+data2$NES <- relevel(data2$NES, ref = "ES")
+```
+
 # Exploratory Variables
 
 I also want to clean some other variables. These may not make too much sense in a model focused on Parsimony. However, they can be useful in a machine learning context where we can fit up to 50-60 variables at max. However, a model with 10 or less would probably be best. This dataset isn't big
@@ -305,20 +335,9 @@ I also want to clean some other variables. These may not make too much sense in 
 
 The primary goal of Aim 1 is to fit a logistic regression model to better understand which covariates contribute to any specific patient's risk for non-adherence to the group therapy modality.
 
-## Saturated Model:
-
-To begin, I want to start with a saturated model, but only using the variable that
-
-# Aim 2:
-
-## Dataframe creation
-
-Let's try to train the logistic regression model first.
-
-Before running, let's look for NAs. This will cause problems for us in the model training section.
+First, let's make out outcome a factor
 
 ```{r}
-
 # Let's do one check of our class distribution again:
 summary(data2$group_complete_50)
 prop.table(table(data2$group_complete_50))
@@ -330,13 +349,132 @@ data2$group_complete_50 <- factor(data2$group_complete_50)
 # And set the names to be better suited to the model:
 levels(data2$group_complete_50) <- c("HighRisk", "LowRisk") 
 
+# And now let's set our reference to Low-Risk, as we're only interested in identifying patients that are high risk.
+data2$group_complete_50 <- relevel(data2$group_complete_50, ref = "LowRisk")
+```
 
-# Ok we have a few missing points, let's create a model training dataset to see if we can run the model first.
+## Assumptions:
+
+Before we begin, I want to make sure that my assumptions have been met for Logisitic Regression.
+
+### Linearity of the Log-Link:
+
+The assumption is only needed for continuous variables. In our case, the only variables of interest would be age, Trauma events, and baseline seizure.
+
+To test this, we can check to see if there is significant relationship between the variable of interest and it's log transformation. This is called the Box-Tidwell Test
+
+```{r}
+
+# We already have the log_age variable. So let's create the interaction term
+data2$age_boxtid <- data2$age_log * data2$tblPatient..c_CurrentAge
+
+# And now let's create the same variable for trauma events and baseline seizure.
+
+data2$baseline_log <- log(data2$baseline_seizure)
+data2$baseline_boxtid <- data2$baseline_log * data2$baseline_seizure
+
+# And finally for trauma events
+
+data2$trauma_log <- log(data2$trauma_events)
+data2$trauma_boxtid <- data2$trauma_log * data2$trauma_events
+
+# Also for Sx_Dx_time
+data2$Sx_log <- log(data2$Sx_Dx_time)
+data2$Sx_boxtid <- data2$Sx_log * data2$Sx_Dx_time
+```
+
+Great, now let's fit this to a logistic regression model:
+
+```{r}
+
+# Fit logistic regression model with interaction terms
+model_bt <- glm(group_complete_50 ~ tblPatient..c_CurrentAge + baseline_seizure + Sx_Dx_time + trauma_events + age_boxtid + baseline_boxtid + Sx_boxtid + trauma_boxtid,
+                data = data2, family = binomial)
+
+# Examine significance of interaction terms
+summary(model_bt)
+```
+
+None of the interaction terms are significant. Therefore, we can assume that all continuous variable meet the assumption of linearity.
+
+## Saturated Model:
+
+To begin, I want to start with a saturated model. This model will be the exact opposite of parsimonious, but I'd like to see if everything works. From there I will use Backwards selection with both AIC and BIC to determine the model of best fit.
+
+Ok, now let's load all variables into a saturated model.
+
+```{r}
+
+# Ok, let's create a variable with all of the variable names
+
+model_vars <- c("group_complete_50", "tblPatient..c_CurrentAge", "gender", "insurance", "disability", 
+                "Sx_Dx_time", "partner", "employment", "anxiety_any", "depression_any", 
+                "baseline_seizure", "trauma_events", "NES", "race")
+
+# Let's drop the missing values
+data2_aim1 <- na.omit(data2[model_vars])
+
+
+# and run the model
+model_saturated <- glm(group_complete_50 ~ tblPatient..c_CurrentAge + gender + insurance + disability + 
+                             Sx_Dx_time + partner + employment + anxiety_any + depression_any + 
+                             baseline_seizure + trauma_events + NES + race, 
+                             data = data2_aim1, family = binomial)
+# Get results
+summary(model_saturated)
+```
+
+Ok, there are a few more variables that have popped here. Not too surprising:
+
+-   As people age, they tend to be lower risk
+
+-   If people have private insurance, they are lower risk
+
+-   If they are unemployed they are higher risk
+
+-   And if they are inconclusive on their assessment for ES, they are lower risk.
+
+-   And if the subjects are non-white, they are at higher risk.
+
+But there are far too many datapoint in this section. Let's use some backwards selection to determine which variables should be used.
+
+```{r}
+
+# Let's start with AIC
+model_aic <- step(model_saturated, direction = "backward")
+summary(model_aic)
+```
+
+And now BIC
+
+```{r}
+
+n <- nrow(data2_aim1)  # use your model's dataset
+model_bic <- step(model_saturated, direction = "backward", k = log(n))
+summary(model_bic)
+
+```
+
+BIC doesn't want any variable other than the intercept. Therefore, we'll move forward with AIC. A model with AIC criterion applied chooses age, Employment status, NES diagnosis, and race.
+
+Given the reduced model: the profile of someone who is high-risk is:
+
+-   A young, non-white, unemployed individual with some confusion about their diagnosis.
+
+# Aim 2:
+
+## Dataframe creation
+
+Let's try to train the logistic regression model first.
+
+Before running, let's look for NAs. This will cause problems for us in the model training section.
+
+```{r}
+
+# Let's create a model training dataset to see if we can run the model first.
 
 data2_model <- na.omit(data2[, c("group_complete_50", "age_log", "insurance", "gender", "race", "employment", "baseline_seizure", "anxiety_any", "depression_any", "disability", "partner", "Sx_Dx_time", "tblPatient..Ethnicity")])
 
-# And now let's set our reference to Low-Risk, as we're only interested in identifying patients that are high risk.
-data2_model$group_complete_50 <- relevel(data2_model$group_complete_50, ref = "LowRisk")
 ```
 
 ## Model training
