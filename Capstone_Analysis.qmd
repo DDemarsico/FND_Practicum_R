@@ -24,7 +24,9 @@ library(gt)         # For nice table 1s
 library(gtsummary)  # Used for pretty table 1s
 library(caret)      # Used for Yeo-Johnson transformation
 library(pROC)       # Used for ROC curves
-library(glmnet)    # For Lasso regression
+library(glmnet)     # For Lasso regression
+library(pwr)
+library(powerMediation) # Used for Power Analysis
 ```
 
 # Data Import
@@ -47,6 +49,7 @@ table(data$group_complete_50)
 # 258 patients completed less than 50% of their visits, and 359 subjects completed greater than 50% of their visits. This leads to a total of 617 patients used in our study.
 
 # Now let's s
+print(258/617)
 
 ```
 
@@ -77,6 +80,22 @@ tbl1 <- data2 %>%
   as_gt()
 
 tbl1
+```
+
+Now let's do totals:
+
+```{r}
+
+
+tbl2 <- data2 %>%
+  select(group_complete_50, tblPatient..c_CurrentAge, tblPatient..Gender, tblPatient..Gender, race, insurance, Sx_Dx_time, trauma_events, baseline_seizure, tblPatient..c_lastIEmployment, depression_any, anxiety_any, tblPatient..maritalStatus, disability) %>%
+  tbl_summary %>%
+  modify_header(label ~ "**Variable**") %>%
+  bold_labels() %>%
+  modify_caption("**Table 1.** Baseline Characteristics") %>%
+  as_gt()
+
+tbl2
 ```
 
 ### Summary
@@ -325,9 +344,22 @@ table(data2$NES)
 data2$NES <- relevel(data2$NES, ref = "ES")
 ```
 
-# Exploratory Variables
+# Power Analysis
 
-I also want to clean some other variables. These may not make too much sense in a model focused on Parsimony. However, they can be useful in a machine learning context where we can fit up to 50-60 variables at max. However, a model with 10 or less would probably be best. This dataset isn't big
+Before we run our analysis, let's check to make sure that we have the appropriate amount of statistical power to actually make claims with our results.
+
+For this analysis, we'll be using a two-sided significance level of **0.05** and a desired statistical power of **80%**. Additionally, given the novelty of our study, there isn't pilot data to infer our effect size from. Given that we are primarily using categorical or binary variables, we will assume a small to moderate effect size corresponding to an odds ratio of 1.3.
+
+Our current dataset consists of an N of 617 patients...
+
+```{r}
+
+# Suppose you have 10 predictors
+pwr.f2.test(u = 10, f2 = 0.05, sig.level = 0.05, power = 0.80)
+
+# With 10 predictors in the saturaed model: we would need 334 subjects to be able to be confident in our results. Our sample size is sufficient.
+
+```
 
 # Aim 1:
 
@@ -436,6 +468,8 @@ Ok, there are a few more variables that have popped here. Not too surprising:
 
 -   And if the subjects are non-white, they are at higher risk.
 
+## Reduced Model
+
 But there are far too many datapoint in this section. Let's use some backwards selection to determine which variables should be used.
 
 ```{r}
@@ -443,6 +477,19 @@ But there are far too many datapoint in this section. Let's use some backwards s
 # Let's start with AIC
 model_aic <- step(model_saturated, direction = "backward")
 summary(model_aic)
+
+# Add ORS and CI:
+# Exponentiate coefficients (odds ratios)
+OR <- exp(coef(model_aic))
+
+# Exponentiate 95% confidence intervals
+CI <- exp(confint(model_aic))  # This uses profile likelihood CIs
+
+# Combine into a table
+results <- cbind(OR, CI)
+colnames(results) <- c("OR", "2.5 %", "97.5 %")
+
+round(results, 2)
 ```
 
 And now BIC
