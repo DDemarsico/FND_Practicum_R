@@ -25,8 +25,9 @@ library(gtsummary)  # Used for pretty table 1s
 library(caret)      # Used for Yeo-Johnson transformation
 library(pROC)       # Used for ROC curves
 library(glmnet)     # For Lasso regression
-library(pwr)
+library(pwr)        # Used for Power Analysis
 library(powerMediation) # Used for Power Analysis
+library(car)            # Used for VIF  
 ```
 
 # Data Import
@@ -355,7 +356,7 @@ Our current dataset consists of an N of 617 patients...
 ```{r}
 
 # Suppose you have 10 predictors
-pwr.f2.test(u = 10, f2 = 0.05, sig.level = 0.05, power = 0.80)
+pwr.f2.test(u = 13, f2 = 0.05, sig.level = 0.05, power = 0.80)
 
 # With 10 predictors in the saturaed model: we would need 334 subjects to be able to be confident in our results. Our sample size is sufficient.
 
@@ -454,6 +455,8 @@ model_saturated <- glm(group_complete_50 ~ tblPatient..c_CurrentAge + gender + i
                              data = data2_aim1, family = binomial)
 # Get results
 summary(model_saturated)
+
+
 ```
 
 Ok, there are a few more variables that have popped here. Not too surprising:
@@ -467,6 +470,17 @@ Ok, there are a few more variables that have popped here. Not too surprising:
 -   And if they are inconclusive on their assessment for ES, they are lower risk.
 
 -   And if the subjects are non-white, they are at higher risk.
+
+### VIF
+
+Now let's check the VIF for multicollinearity:
+
+```{r}
+
+vif(model_saturated)
+```
+
+No VIF over 1.37: No multicollinearity
 
 ## Reduced Model
 
@@ -508,6 +522,15 @@ Given the reduced model: the profile of someone who is high-risk is:
 
 -   A young, non-white, unemployed individual with some confusion about their diagnosis.
 
+### VIF
+
+Now let's check for multicollinearity in the final model
+
+```{r}
+
+vif(model_aic)
+```
+
 # Aim 2:
 
 ## Dataframe creation
@@ -520,7 +543,7 @@ Before running, let's look for NAs. This will cause problems for us in the model
 
 # Let's create a model training dataset to see if we can run the model first.
 
-data2_model <- na.omit(data2[, c("group_complete_50", "age_log", "insurance", "gender", "race", "employment", "baseline_seizure", "anxiety_any", "depression_any", "disability", "partner", "Sx_Dx_time", "tblPatient..Ethnicity")])
+data2_model <- na.omit(data2[, c("group_complete_50", "tblPatient..c_CurrentAge", "insurance", "gender", "race", "employment", "baseline_seizure", "anxiety_any", "depression_any", "disability", "partner", "Sx_Dx_time", "tblPatient..nesES","trauma_events")])
 
 ```
 
@@ -530,13 +553,17 @@ data2_model <- na.omit(data2[, c("group_complete_50", "age_log", "insurance", "g
 # Define the control for cross-validation
 train_control <- trainControl(method = "cv", number = 10, classProbs = TRUE, summaryFunction = twoClassSummary, savePredictions = "final")
 
+# Assign higher weight to HighRisk observations
+weights <- ifelse(data2_model$group_complete_50 == "HighRisk", 2, 1)
+
 
 # Train the logistic regression model
 model_simple1 <- train(
-  group_complete_50 ~ age_log + insurance + gender + race + employment + baseline_seizure + anxiety_any + depression_any + disability + partner + Sx_Dx_time, 
+  group_complete_50 ~ tblPatient..c_CurrentAge + insurance + gender + race + employment + baseline_seizure + anxiety_any + depression_any + disability + partner + Sx_Dx_time + trauma_events + tblPatient..nesES, 
   data = data2_model,
   method = "glm",
   family = "binomial",
+  weights = weights,
   trControl = train_control
 )
 
@@ -575,7 +602,7 @@ Now that we have a model that is *AT LEAST* sensitive, let's try to make this mo
 ```{r}
 
 # Define predictor names
-features <- c("age_log", "insurance", "gender", "race", "employment", "baseline_seizure", "anxiety_any", "depression_any", "disability", "partner", "Sx_Dx_time")
+features <- c("tblPatient..c_CurrentAge", "insurance", "gender", "race", "employment", "baseline_seizure", "anxiety_any", "depression_any", "disability", "partner", "Sx_Dx_time", "tblPatient..nesES","trauma_events")
 
 # Define control parameters for RFE
 rfe_control <- rfeControl(functions = rfFuncs, # Using Random Forest for feature importance
@@ -586,7 +613,7 @@ set.seed(123)
 # Run RFE
 rfe_results <- rfe(x = data2_model[, features],  # Predictor variables
                   y = data2_model[, "group_complete_50"],    # Outcome variable
-                  sizes = c(1:11),       # Number of features to try
+                  sizes = c(1:13),       # Number of features to try
                   rfeControl = rfe_control)
 
 # Get the selected features
@@ -598,25 +625,31 @@ print(selected_features)
 
 ```
 
-When viewing the effects of the model, the top 5 most important variables are Sx_Dx_time, baseline seizure count, employment, insurance, and gender.
+Using 10 -fold
 
-However, this model had the best accuracy (.5879).
+:When viewing the effects of the model, the top 5 most important variables are Sx_Dx_time, baseline seizure count, employment, insurance, and race.
+
+However. the model has the highest accuracy with 12 variables (.6097)
+
+Using 5 fold:
+
+Selects: Sx_Dx_time, baseline_seizure, and race
 
 Let's run this model one more time to see the sensitivity:
 
 ```{r}
 
-set.seed(123)
 # Train the logistic regression model
 model_simple2 <- train(
-  group_complete_50 ~ insurance + gender + employment + baseline_seizure + Sx_Dx_time, 
+  group_complete_50 ~ Sx_Dx_time + baseline_seizure + employment + race + insurance + disability + gender + anxiety_any + partner + depression_any + tblPatient..c_CurrentAge + trauma_events, 
   data = data2_model,
   method = "glm",
   family = "binomial",
+  #weights = weights,
   trControl = train_control
 )
 
-model_simple2
+print(model_simple2)
 ```
 
 ROC = .5499, Sensitivity = .81, Specificity .25
@@ -656,7 +689,7 @@ roc_df <- coords(
 ggplot(roc_df, aes(x = threshold)) +
   geom_line(aes(y = sensitivity, color = "Specificity"), linewidth = 1.2) +
   geom_line(aes(y = specificity, color = "Sensitivity"), linewidth = 1.2) +
-  geom_vline(xintercept = 0.5, linetype = "dashed", color = "gray40") +
+  geom_vline(xintercept = 0.45, linetype = "dashed", color = "gray40") +
   scale_color_manual(values = c("Sensitivity" = "blue", "Specificity" = "red")) +
   labs(
     y = "Rate",
@@ -664,6 +697,36 @@ ggplot(roc_df, aes(x = threshold)) +
     title = "Sensitivity and Specificity vs. Threshold (Logistic Regression)"
   ) +
   theme_minimal()
+
+```
+
+This looks ok, but I really want to move the threshold for classification back. a bit. Because it our case, it's more important to get high risk people identified, than provide additional resources to patients who do actually need it. Looking at this chart, it looks like if we move the threshold to \~.41, we would reach a better result. Let's try:
+
+```{r}
+# Get predicted probability of being HighRisk
+pred_probs <- predict(model_simple2, newdata = data2_model, type = "prob")[, "HighRisk"]
+
+# Apply custom threshold
+custom_class <- ifelse(pred_probs > 0.48, "HighRisk", "LowRisk")
+
+# Make sure both are factors with the same levels
+custom_class <- factor(custom_class, levels = c("LowRisk", "HighRisk"))
+reference <- factor(data2_model$group_complete_50, levels = c("LowRisk", "HighRisk"))
+
+# Evaluate
+confusionMatrix(
+  factor(custom_class, levels = c("LowRisk", "HighRisk")),
+  factor(data2_model$group_complete_50, levels = c("LowRisk", "HighRisk")),
+  positive = "LowRisk"
+)
+```
+
+```{r}
+roc_obj <- roc(response = data2_model$group_complete_50,
+               predictor = pred_probs[,"HighRisk"],
+               levels = c("LowRisk", "HighRisk"))
+plot(roc_obj)
+
 ```
 
 # Lasso
@@ -674,7 +737,7 @@ Now that we have our final variables, I want to compare the results with Lasso r
 
 
 # Select the 10 RFE-selected variables
-rfe_vars <- c("age_log", "insurance", "gender", "race", "employment", "baseline_seizure", "anxiety_any", "disability", "partner", "Sx_Dx_time") 
+rfe_vars <- c("tblPatient..c_CurrentAge", "insurance", "gender", "race", "employment", "baseline_seizure", "anxiety_any", "depression_any", "disability", "partner", "Sx_Dx_time", "tblPatient..nesES","trauma_events") 
 
 # 2. Subset the data — ensure all selected variables exist and have no missing
 # Subset and remove rows with missing values
@@ -743,7 +806,7 @@ I ran this model first with logistic regression then with lasso, but this was hi
 ```{r}
 
 # First we'll set our variable names to be used.
-predictors <- c("age_log", "insurance", "gender", "race", "employment", "baseline_seizure", "anxiety_any", "depression_any", "disability", "partner", "Sx_Dx_time", "tblPatient..Ethnicity")
+predictors <- c("tblPatient..c_CurrentAge", "insurance", "gender", "race", "employment", "baseline_seizure", "anxiety_any", "depression_any", "disability", "partner", "Sx_Dx_time", "tblPatient..nesES","trauma_events")
 
 
 set.seed(123)
@@ -756,7 +819,7 @@ ctrl <- rfeControl(functions = rfFuncs,
 
 rfe_rf <- rfe(x = data2_model[, predictors],   # predictors is vector of var names
               y = data2_model$group_complete_50,
-              sizes = c(1,2,3,4,5,6,7,8,9,10),   # try subsets of variables
+              sizes = c(1,2,3,4,5,6,7,8,9,10,11,12,13),   # try subsets of variables
               rfeControl = ctrl)
 
 
@@ -771,7 +834,7 @@ Great, now using these 8 variables, let's run the random forest model.
 ```{r}
 
 # Set the selected variables in their own list
-selected_vars <- c("baseline_seizure", "Sx_Dx_time", "employment", "gender", "insurance", "disability", "race", "tblPatient..Ethnicity")
+selected_vars <- c("baseline_seizure", "Sx_Dx_time", "employment", "gender", "insurance", "disability", "race", "depression_any", "anxiety_any", "partner", "tblPatient..c_CurrentAge", "trauma_events")
 
 # create a new dataset with the cleaned values
 rf_data <- data2_model[, c("group_complete_50", selected_vars)]
@@ -804,8 +867,8 @@ rf_model <- train(group_complete_50 ~ .,
                   data = rf_data,
                   method = "rf",
                   trControl = ctrl,
-                  metric = "ROC",      # Optimize for AUC
-                  tuneLength = 5,
+                  metric = "Accuracy",      # Optimize for AUC
+                  tuneLength = 13,
                   ntree = 1000)      # Auto-tunes mtry
 
 print(rf_model)
@@ -953,7 +1016,7 @@ First let's make the dataset
 
 ```{r}
 # Set the selected variables in their own list
-selected_vars <- c("baseline_seizure", "Sx_Dx_time", "employment", "gender", "insurance", "disability", "race", "tblPatient..Ethnicity")
+selected_vars <- c("tblPatient..c_CurrentAge", "insurance", "gender", "race", "employment", "baseline_seizure", "anxiety_any", "depression_any", "disability", "partner", "Sx_Dx_time", "tblPatient..nesES","trauma_events")
 
 # create a new dataset with the cleaned values
 xg_data <- data2_model[, c("group_complete_50", selected_vars)]
